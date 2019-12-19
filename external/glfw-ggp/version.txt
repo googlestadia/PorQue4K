@@ -1,0 +1,8 @@
+Samples
+1.38-ucdk_ggp-samples-1.38.0.12856
+
+SDK Installer
+1.38-ucdk_StadiaSDKInstaller-1.38.0.12856.msi
+
+SDK (ggp version)
+13113.1.38.0 Thu 11/14/2019  3:32:04.75

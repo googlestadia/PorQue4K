@@ -1,0 +1,21 @@
+[submodule "third_party/glfw"]
+	path = third_party/glfw
+	url = https://github.com/glfw/glfw
+[submodule "third_party/glm"]
+	path = third_party/glm
+	url = https://github.com/g-truc/glm
+[submodule "third_party/imgui"]
+	path = third_party/imgui
+	url = https://github.com/ocornut/imgui
+[submodule "third_party/SPIRV-Reflect"]
+	path = third_party/SPIRV-Reflect
+	url = https://github.com/chaoticbob/SPIRV-Reflect
+[submodule "third_party/VulkanMemoryAllocator"]
+	path = third_party/VulkanMemoryAllocator
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
+[submodule "third_party/stb"]
+	path = third_party/stb
+	url = https://github.com/nothings/stb
+[submodule "third_party/tinyobjloader"]
+	path = third_party/tinyobjloader
+	url = https://github.com/syoyo/tinyobjloader
