@@ -708,8 +708,7 @@ static void LoadProcAddrInstance(VkInstance instance, vkex::GetInstanceProcType 
 #endif // defined(VK_USE_PLATFORM_XLIB_XRANDR_EXT)
 
 #if defined(VK_USE_PLATFORM_GGP_KHR)
-  p_table->CreateYetiSurfaceGOOGLE                                = (PFN_vkCreateYetiSurfaceGOOGLE)fnProcLoad(instance, "vkCreateYetiSurfaceGOOGLE");
-  p_table->GetPhysicalDeviceYetiPresentationSupportGOOGLE         = (PFN_vkGetPhysicalDeviceYetiPresentationSupportGOOGLE)fnProcLoad(instance, "vkGetPhysicalDeviceYetiPresentationSupportGOOGLE");
+  p_table->CreateStreamDescriptorSurfaceGGP                       = (PFN_vkCreateStreamDescriptorSurfaceGGP)fnProcLoad(instance, "vkCreateStreamDescriptorSurfaceGGP");
 #endif // defined(VK_USE_PLATFORM_GGP_KHR)
 }
 
@@ -1100,8 +1099,7 @@ static void AssignProcsInstance(const vkex::InstanceFunctionTable* p_table)
 #endif // defined(VK_USE_PLATFORM_XLIB_XRANDR_EXT)
 
 #if defined(VK_USE_PLATFORM_GGP_KHR)
-  vkex::CreateYetiSurfaceGOOGLE                                = p_table->CreateYetiSurfaceGOOGLE;
-  vkex::GetPhysicalDeviceYetiPresentationSupportGOOGLE         = p_table->GetPhysicalDeviceYetiPresentationSupportGOOGLE;
+  vkex::CreateStreamDescriptorSurfaceGGP                       = p_table->CreateStreamDescriptorSurfaceGGP;
 #endif // defined(VK_USE_PLATFORM_GGP_KHR)
 }
 
@@ -1721,8 +1719,7 @@ PFN_vkGetRandROutputDisplayEXT                         GetRandROutputDisplayEXT 
 #endif // defined(VK_USE_PLATFORM_XLIB_XRANDR_EXT)
 
 #if defined(VK_USE_PLATFORM_GGP_KHR)
-PFN_vkCreateYetiSurfaceGOOGLE                          CreateYetiSurfaceGOOGLE = nullptr;
-PFN_vkGetPhysicalDeviceYetiPresentationSupportGOOGLE   GetPhysicalDeviceYetiPresentationSupportGOOGLE = nullptr;
+PFN_vkCreateStreamDescriptorSurfaceGGP                 CreateStreamDescriptorSurfaceGGP = nullptr;
 #endif // defined(VK_USE_PLATFORM_GGP_KHR)
 
 } // namespace vkex

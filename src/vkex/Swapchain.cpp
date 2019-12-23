@@ -52,9 +52,9 @@ vkex::Result CSurface::InternalCreate(
       p_allocator,
       &m_vk_object);
 #elif defined(VKEX_LINUX_GGP)
-    m_vk_create_info = { VK_STRUCTURE_TYPE_YETI_SURFACE_CREATE_INFO_GOOGLE };
-    m_vk_create_info.streamIndex = 0;
-    VkResult vk_result = vkex::CreateYetiSurfaceGOOGLE(
+    m_vk_create_info = { VK_STRUCTURE_TYPE_STREAM_DESCRIPTOR_SURFACE_CREATE_INFO_GGP };
+    m_vk_create_info.streamDescriptor = GgpStreamDescriptorConstants::kGgpPrimaryStreamDescriptor;
+    VkResult vk_result = vkex::CreateStreamDescriptorSurfaceGGP(
       *m_instance,
       &m_vk_create_info,
       p_allocator,

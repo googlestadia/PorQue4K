@@ -18,8 +18,6 @@
 
 #include "AssetUtil.h"
 #include "DebugUi.h"
-//#include "common/DeferredRenderPass.h"
-//#include "common/PipelineStatistics.h"
 #include "SimpleRenderPass.h"
 
 #define ARG_HEADLESS_SHORT_NAME "s"
@@ -39,7 +37,6 @@ struct ViewTransformData {
 using ViewTransformConstants = vkex::ConstantBufferData<ViewTransformData>;
 
 class VkexInfoApp
-    //: public SOLApplication
     : public vkex::Application
 {
 public:
@@ -220,7 +217,6 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
 
 int main(int argc, char** argv)
 {
-    //return 0;
     VkexInfoApp app;
     vkex::Result vkex_result = app.Run(argc, argv);
     if (!vkex_result) {

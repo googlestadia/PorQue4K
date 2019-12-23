@@ -1,9 +1,12 @@
 # VulkanPorQue4K
-4K yee
+4K yee  
+We out here
 
 # Builds
 
 ## Build Windows
+
+`setup_windows.bat`
 ```
 $ mkdir buildWinVS2017
 $ cd buildWinVS2017
@@ -14,14 +17,15 @@ Then build from generated Visual Studio solution `buildWinVS2017\VulkanPorQue4K.
 
 ## Build GGP
 
-Deploy assets to binary (from repo root folder):
+Deploy assets to binary (from repo root folder):  
+`deploy_assets.bat`|`deploy_assets.sh`
 ```
 > ggp ssh put -r ./assets
 ```
 
-TODO: This should be part of an initial setup script
-
 ### Build GGP + Ninja
+
+`setup_ggp_ninja.sh`
 ```
 $ mkdir buildGGP
 $ cd buildGGP
@@ -40,6 +44,7 @@ Right now, it's not entirely clear how to use CMake to directly generate a GGP-c
 Visual Studio solution. However, we can get pretty close, and fix up the last deltas with
 a custom script. Obviously, this is fragile, but it works ok for now.
 
+`setup_ggp_vs.bat`
 ```
 $ mkdir buildGGPVS
 $ cd buildGGPVS

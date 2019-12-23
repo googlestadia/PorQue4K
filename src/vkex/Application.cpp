@@ -2175,6 +2175,11 @@ vkex::Result Application::SubmitPresent(Application::PresentData* p_data)
     vk_present_info.pImageIndices       = DataPtr(vk_swapchain_image_indices);
     vk_present_info.pResults            = nullptr;
 
+#if defined(VKEX_LINUX_GGP)
+    // TODO: Add frame token support to be a good citizen...
+    // Though, it isn't really needed for this sample
+#endif
+
     // Time start
     TimeRange time_range = {};
     time_range.start = static_cast<float>(GetElapsedTime());

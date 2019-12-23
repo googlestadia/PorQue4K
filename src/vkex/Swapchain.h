@@ -114,16 +114,16 @@ private:
   vkex::SurfaceCreateInfo           m_create_info = {};
 
 #if defined(VKEX_WIN32)
-  VkWin32SurfaceCreateInfoKHR       m_vk_create_info = {};
+  VkWin32SurfaceCreateInfoKHR               m_vk_create_info = {};
 #elif defined(VKEX_LINUX)
 # if defined(VKEX_LINUX_WAYLAND)
-  VkWaylandSurfaceCreateInfoKHR     m_vk_create_info = {};
+  VkWaylandSurfaceCreateInfoKHR             m_vk_create_info = {};
 # elif defined(VKEX_LINUX_XCB)
-  VkXcbSurfaceCreateInfoKHR         m_vk_create_info = {};
+  VkXcbSurfaceCreateInfoKHR                 m_vk_create_info = {};
 # elif defined(VKEX_LINUX_XLIB)
-  VkXlibSurfaceCreateInfoKHR        m_vk_create_info = {};
+  VkXlibSurfaceCreateInfoKHR                m_vk_create_info = {};
 # elif defined(VKEX_LINUX_GGP)
-  VkYetiSurfaceCreateInfoGOOGLE     m_vk_create_info = {};
+  VkStreamDescriptorSurfaceCreateInfoGGP    m_vk_create_info = {};
 # endif
 #endif
   VkSurfaceKHR                      m_vk_object = VK_NULL_HANDLE;

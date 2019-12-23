@@ -261,6 +261,10 @@ vkex::Result CDevice::InitializeExtensions()
     std::vector<std::string> required;
     if (GetInstance()->IsSwapchainEnabled()) {
       required.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+#if defined(VKEX_LINUX_GGP)     
+      required.push_back(VK_GGP_FRAME_TOKEN_EXTENSION_NAME);
+#endif
     }
 
     if (m_create_info.physical_device->IsAMD()) {

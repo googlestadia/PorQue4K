@@ -179,8 +179,7 @@ struct InstanceFunctionTable {
 #endif // defined(VK_USE_PLATFORM_XLIB_XRANDR_EXT)
 
 #if defined(VK_USE_PLATFORM_GGP_KHR)
-  PFN_vkCreateYetiSurfaceGOOGLE                          CreateYetiSurfaceGOOGLE;
-  PFN_vkGetPhysicalDeviceYetiPresentationSupportGOOGLE   GetPhysicalDeviceYetiPresentationSupportGOOGLE;
+  PFN_vkCreateStreamDescriptorSurfaceGGP                 CreateStreamDescriptorSurfaceGGP;
 #endif // defined(VK_USE_PLATFORM_GGP_KHR)
 };
 
@@ -446,6 +445,9 @@ struct DeviceFunctionTable {
 
 #if defined(VK_USE_PLATFORM_XLIB_XRANDR_EXT)
 #endif // defined(VK_USE_PLATFORM_XLIB_XRANDR_EXT)
+
+#if defined(VK_USE_PLATFORM_GGP_KHR)
+#endif // defined(VK_USE_PLATFORM_GGP_KHR)
 };
 
 // =================================================================================================
@@ -799,8 +801,7 @@ extern PFN_vkGetRandROutputDisplayEXT                         GetRandROutputDisp
 #endif // defined(VK_USE_PLATFORM_XLIB_XRANDR_EXT)
 
 #if defined(VK_USE_PLATFORM_GGP_KHR)
-extern PFN_vkCreateYetiSurfaceGOOGLE                          CreateYetiSurfaceGOOGLE;
-extern PFN_vkGetPhysicalDeviceYetiPresentationSupportGOOGLE   GetPhysicalDeviceYetiPresentationSupportGOOGLE;
+extern PFN_vkCreateStreamDescriptorSurfaceGGP                 CreateStreamDescriptorSurfaceGGP;
 #endif // defined(VK_USE_PLATFORM_GGP_KHR)
 
 } // namespace vkex

@@ -272,7 +272,7 @@ vkex::Result CInstance::InitializeExtensions()
  #elif defined(VKEX_LINUX_XLIB)
       required.push_back(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
  #elif defined(VKEX_LINUX_GGP)     
-      required.push_back(VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME);
+      required.push_back(VK_GGP_STREAM_DESCRIPTOR_SURFACE_EXTENSION_NAME);
  #endif
 #endif
     }
