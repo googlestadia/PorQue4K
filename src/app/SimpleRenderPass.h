@@ -18,12 +18,13 @@ struct SimpleRenderPass {
   vkex::RenderPass          render_pass;
 };
 
-vkex::Result CreateSimpleRenderPassColorAttachmentOnly(
-  vkex::Device      device,
-  uint32_t          width,
-  uint32_t          height,
-  VkFormat          format,
-  SimpleRenderPass* p_simple_pass
+vkex::Result CreateSimpleRenderPass(
+    vkex::Device      device,
+    uint32_t          width,
+    uint32_t          height,
+    VkFormat          color_format,
+    VkFormat          depth_format,
+    SimpleRenderPass* p_simple_pass
 );
 
 #endif // __SIMPLE_RENDER_PASS_H__

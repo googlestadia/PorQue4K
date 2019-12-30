@@ -152,7 +152,7 @@ public:
   void  CmdExecuteCommands(const std::vector<VkCommandBuffer>* pCommandBuffers);
 
   void  CmdTransitionImageLayout(VkImage image, VkImageAspectFlags aspectMask, uint32_t baseMipLevel, uint32_t levelCount, uint32_t baseArrayLayer, uint32_t layerCount, VkImageLayout oldLayout, VkImageLayout newLayout, VkPipelineStageFlags newPipelineStage);
-  void  CmdTransitionImageLyaout(vkex::Texture texture, VkImageLayout oldLayout, VkImageLayout newLayout, VkPipelineStageFlags newPipelineStage);
+  void  CmdTransitionImageLayout(vkex::Texture texture, VkImageLayout oldLayout, VkImageLayout newLayout, VkPipelineStageFlags newPipelineStage);
 
 private:
   friend class CCommandPool;

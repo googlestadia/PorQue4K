@@ -381,7 +381,8 @@ public:
     uint32_t            GetFrameIndex() const { return m_frame_index; }
     vkex::Semaphore     GetImageAcquiredSemaphore() const { return m_image_acquired_sempahore; }
     vkex::CommandBuffer GetCommandBuffer() { return m_work_cmd; }
-    vkex::Semaphore     GetWorkCompleteSemaphore() const {return m_work_complete_semaphore; }
+    vkex::Semaphore     GetWorkCompleteForRenderSemaphore() const { return m_work_complete_for_render_semaphore; }
+    vkex::Semaphore     GetWorkCompleteForPresentSemaphore() const { return m_work_complete_for_present_semaphore; }
     vkex::RenderPass    GetRenderPass() const { return m_render_pass; }
   private:
     friend class vkex::Application;
@@ -393,7 +394,8 @@ public:
     uint32_t            m_frame_index = UINT32_MAX;
     vkex::Semaphore     m_image_acquired_sempahore = nullptr;
     vkex::CommandBuffer m_work_cmd = nullptr;
-    vkex::Semaphore     m_work_complete_semaphore = nullptr;
+    vkex::Semaphore     m_work_complete_for_render_semaphore = nullptr;
+    vkex::Semaphore     m_work_complete_for_present_semaphore = nullptr;
     vkex::RenderPass    m_render_pass = nullptr;
   };
 
@@ -480,12 +482,12 @@ public:
 
   //! @fn SetCursorMode
   void SetCursorMode(vkex::CursorMode cursor_mode);
-
-  //! @fn SubmitPresent
-  vkex::Result SubmitRender(Application::RenderData* p_data);
-
+  
   //! @fn DrawImGui
   void DrawImGui(vkex::CommandBuffer cmd);
+  
+  //! @fn SubmitPresent
+  vkex::Result SubmitRender(Application::RenderData* p_data);
 
   //! @fn SubmitPresent
   vkex::Result SubmitPresent(Application::PresentData* p_data);
@@ -646,7 +648,7 @@ private:
 private:
   bool IsRunning() const;
 
-private:
+protected:
   bool                          m_running = false;
 
   vkex::ArgParser               m_args;
@@ -700,6 +702,7 @@ private:
   std::vector<PresentDataPtr>   m_per_frame_present_data;
   vkex::CommandPool             m_present_command_pool = nullptr;
   PresentData*                  m_current_present_data = nullptr;
+  PresentData*                  m_previous_present_data = nullptr;
   vkex::Fence                   m_frame_fence = nullptr;
 
   vkex::DescriptorPool          m_imgui_descriptor_pool = nullptr;

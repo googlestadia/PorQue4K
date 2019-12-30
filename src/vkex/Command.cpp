@@ -951,7 +951,7 @@ void CCommandBuffer::CmdTransitionImageLayout(VkImage image, VkImageAspectFlags 
   this->CmdPipelineBarrier(src_stage_mask, dst_stage_mask, dependency_flags, 0, nullptr, 0, nullptr, 1, &barrier);
 }
 
-void CCommandBuffer::CmdTransitionImageLyaout(vkex::Texture texture, VkImageLayout oldLayout, VkImageLayout newLayout, VkPipelineStageFlags newPipelineStage)
+void CCommandBuffer::CmdTransitionImageLayout(vkex::Texture texture, VkImageLayout oldLayout, VkImageLayout newLayout, VkPipelineStageFlags newPipelineStage)
 {
   this->CmdTransitionImageLayout(
     *(texture->GetImage()),

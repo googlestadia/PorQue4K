@@ -404,13 +404,27 @@ vkex::Result Application::PresentData::InternalCreate(vkex::Device device, uint3
       return vkex_result;
     }
   }
-  // Work complete semaphore
+  // Work complete for render semaphore
   {
     vkex::SemaphoreCreateInfo semaphore_create_info = {};
+    semaphore_create_info.object_name = "present_data:work_complete_for_render_semaphore:" + std::to_string(frame_index);
     vkex::Result vkex_result = vkex::Result::Undefined;
     VKEX_RESULT_CALL(
       vkex_result,
-      m_device->CreateSemaphore(semaphore_create_info, &m_work_complete_semaphore)
+      m_device->CreateSemaphore(semaphore_create_info, &m_work_complete_for_render_semaphore)
+    );
+    if (!vkex_result) {
+      return vkex_result;
+    }
+  }
+  // Work complete for present semaphore
+  {
+    vkex::SemaphoreCreateInfo semaphore_create_info = {};
+    semaphore_create_info.object_name = "present_data:work_complete_for_present_semaphore:" + std::to_string(frame_index);
+    vkex::Result vkex_result = vkex::Result::Undefined;
+    VKEX_RESULT_CALL(
+      vkex_result,
+      m_device->CreateSemaphore(semaphore_create_info, &m_work_complete_for_present_semaphore)
     );
     if (!vkex_result) {
       return vkex_result;
@@ -433,12 +447,22 @@ vkex::Result Application::PresentData::InternalDestroy()
       return vkex_result;
     }   
   }
-  // Work complete semaphore
-  if (m_work_complete_semaphore != nullptr) {
+  // Work complete for render semaphore
+  if (m_work_complete_for_render_semaphore != nullptr) {
+      vkex::Result vkex_result = vkex::Result::Undefined;
+      VKEX_RESULT_CALL(
+          vkex_result,
+          m_device->DestroySemaphore(m_work_complete_for_render_semaphore);
+      );
+      if (!vkex_result) {
+          return vkex_result;
+      }
+  }  // Work complete for present semaphore
+  if (m_work_complete_for_present_semaphore != nullptr) {
     vkex::Result vkex_result = vkex::Result::Undefined;
     VKEX_RESULT_CALL(
       vkex_result,
-      m_device->DestroySemaphore(m_work_complete_semaphore);
+      m_device->DestroySemaphore(m_work_complete_for_present_semaphore);
     );
     if (!vkex_result) {
       return vkex_result;
@@ -917,6 +941,30 @@ vkex::Result Application::InitializeVkexSwapchain()
     );
     if (!vkex_result) {
       return vkex_result;
+    }
+  }
+
+  // Transition swapchain images to VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+  {
+    uint32_t image_count = m_swapchain->GetImageCount();
+    for (uint32_t image_index = 0; image_index < image_count; ++image_index) {
+      vkex::Image image = nullptr;
+      {
+        vkex::Result vkex_result = vkex::Result::Undefined;
+        VKEX_RESULT_CALL(
+          vkex_result,
+          m_swapchain->GetColorImage(image_index, &image);
+        );
+        if (!vkex_result) {
+          return vkex_result;
+        }
+      }
+      vkex::Result vkex_result = vkex::Result::Undefined;
+      VKEX_CALL(vkex::TransitionImageLayout(m_graphics_queue,
+          image,
+          image->GetInitialLayout(),
+          VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+          VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT));
     }
   }
 
@@ -2087,22 +2135,64 @@ void Application::SetCursorMode(vkex::CursorMode cursor_mode)
   }
 }
 
+void Application::DrawImGui(vkex::CommandBuffer cmd)
+{
+    ImGui::Render();
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *cmd);
+}
+
 vkex::Result Application::SubmitRender(Application::RenderData* p_data)
 {
-  // Update submitted flag
+  if (IsApplicationModeHeadless()) {
+    // TODO: This isn't entirely true, but the semaphore logic has to change
+    // if we are windowless...which we won't be!
+    return vkex::Result::ErrorInvalidApplicationMode;
+  }
+
+  VkCommandBuffer vk_command_buffer = *(p_data->GetCommandBuffer());
+  VkPipelineStageFlags vk_pipeline_stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+  VkSemaphore vk_work_complete_semaphore = *(p_data->GetWorkCompleteSemaphore());
+  VkSemaphore vk_present_complete_semaphore = nullptr;
+  if (m_previous_present_data != nullptr){
+    vk_present_complete_semaphore = *(m_previous_present_data->GetWorkCompleteForRenderSemaphore());
+  }
+
+  // Submit render work
   {
+    std::vector<VkSemaphore> vk_wait_semaphores;
+    if (vk_present_complete_semaphore != nullptr) {
+    vk_wait_semaphores.push_back(vk_present_complete_semaphore);
+    }
+    std::vector<VkCommandBuffer> vk_command_buffers = { vk_command_buffer };
+    std::vector<VkPipelineStageFlags> vk_pipeline_stages = { vk_pipeline_stage };
+    std::vector<VkSemaphore> vk_signal_semaphores = { vk_work_complete_semaphore };
+
+    VkSubmitInfo vk_submit_info = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
+    vk_submit_info.waitSemaphoreCount = CountU32(vk_wait_semaphores);
+    vk_submit_info.pWaitSemaphores = DataPtr(vk_wait_semaphores);
+    vk_submit_info.pWaitDstStageMask = DataPtr(vk_pipeline_stages);
+    vk_submit_info.commandBufferCount = CountU32(vk_command_buffers);
+    vk_submit_info.pCommandBuffers = DataPtr(vk_command_buffers);
+    vk_submit_info.signalSemaphoreCount = CountU32(vk_signal_semaphores);
+    vk_submit_info.pSignalSemaphores = DataPtr(vk_signal_semaphores);
+    // Queue submit
+    VkResult vk_result = InvalidValue<VkResult>::Value;
+    VKEX_VULKAN_RESULT_CALL(
+        vk_result,
+        vkex::QueueSubmit(
+            *m_graphics_queue,
+            1,
+            &vk_submit_info,
+            VK_NULL_HANDLE)
+    );
+    if (vk_result != VK_SUCCESS) {
+        return vkex::Result(vk_result);
+    }
+
     m_render_submitted = true;
   }
 
   return vkex::Result::Success;
-}
-
-void Application::DrawImGui(vkex::CommandBuffer cmd)
-{
-  // Rendering
-  ImGui::Render();
-	// Record Imgui Draw Data and draw funcs into command buffer
-	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *cmd);
 }
 
 vkex::Result Application::SubmitPresent(Application::PresentData* p_data)
@@ -2115,7 +2205,8 @@ vkex::Result Application::SubmitPresent(Application::PresentData* p_data)
   VkSemaphore vk_image_acquired_semaphore = *(p_data->GetImageAcquiredSemaphore());
   VkCommandBuffer vk_command_buffer       = *(p_data->GetCommandBuffer());
   VkPipelineStageFlags vk_pipeline_stage  = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-  VkSemaphore vk_work_complete_semaphore  = *(p_data->GetWorkCompleteSemaphore());
+  VkSemaphore vk_work_complete_for_render_semaphore = *(p_data->GetWorkCompleteForRenderSemaphore());
+  VkSemaphore vk_work_complete_for_present_semaphore  = *(p_data->GetWorkCompleteForPresentSemaphore());
   VkFence vk_work_complete_fence          = *m_frame_fence;
   VkSwapchainKHR vk_swapchain             = *m_swapchain;
   uint32_t vk_swapchain_image_index       = m_current_swapchain_image_index;
@@ -2126,13 +2217,14 @@ vkex::Result Application::SubmitPresent(Application::PresentData* p_data)
     std::vector<VkSemaphore> vk_wait_semaphores           = { vk_image_acquired_semaphore };
     std::vector<VkCommandBuffer> vk_command_buffers       = { vk_command_buffer };
     std::vector<VkPipelineStageFlags> vk_pipeline_stages  = { vk_pipeline_stage };
-    std::vector<VkSemaphore> vk_signal_semaphores         = { vk_work_complete_semaphore };
+    std::vector<VkSemaphore> vk_signal_semaphores         = { vk_work_complete_for_render_semaphore, vk_work_complete_for_present_semaphore };
     
     // Add wait for render work if submitted
     if (m_render_submitted) {
       VkSemaphore vk_render_work_completed_semaphore = *(m_current_render_data->GetWorkCompleteSemaphore());
       vk_wait_semaphores.push_back(vk_render_work_completed_semaphore);
       vk_pipeline_stages.push_back(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+      m_render_submitted = false;
     }
 
     // Submit info
@@ -2162,7 +2254,7 @@ vkex::Result Application::SubmitPresent(Application::PresentData* p_data)
   // Submit present request
   {
     // Containers
-    std::vector<VkSemaphore> vk_wait_semaphores       = { vk_work_complete_semaphore };
+    std::vector<VkSemaphore> vk_wait_semaphores       = { vk_work_complete_for_present_semaphore };
     std::vector<VkSwapchainKHR> vk_swapchains         = { vk_swapchain };
     std::vector<uint32_t> vk_swapchain_image_indices  = { vk_swapchain_image_index };
 
@@ -2456,6 +2548,9 @@ vkex::Result Application::Run(int argn, const char* const* argv)
     // Update current per frame data
     m_current_render_data = m_per_frame_render_data[m_frame_index].get();
     if (IsApplicationModeWindow()) {
+      if (m_current_present_data != nullptr) {
+          m_previous_present_data = m_current_present_data;
+      }
       m_current_present_data = m_per_frame_present_data[m_frame_index].get();
     }
 

@@ -17,58 +17,16 @@
 #include "vkex/Application.h"
 
 #include "AssetUtil.h"
-#include "DebugUi.h"
-#include "SimpleRenderPass.h"
 
-#define ARG_HEADLESS_SHORT_NAME "s"
-#define ARG_HEADLESS_LONG_NAME  "headless"
-
-using float2 = vkex::float2;
-using float3 = vkex::float3;
-using float4 = vkex::float4;
-using float2x2 = vkex::float2x2;
-using float3x3 = vkex::float3x3;
-using float4x4 = vkex::float4x4;
-
-struct ViewTransformData {
-    float4x4 ModelViewProjectionMatrix;
-};
-
-using ViewTransformConstants = vkex::ConstantBufferData<ViewTransformData>;
-
-class VkexInfoApp
-    : public vkex::Application
-{
-public:
-    VkexInfoApp() : vkex::Application(1920, 1080, "0000_vts_info") {}
-    virtual ~VkexInfoApp() {}
-
-    void Configure(const vkex::ArgParser& args, vkex::Configuration& configuration);
-    void Setup();
-    void Update(double frame_elapsed_time) {}
-    void Render(vkex::Application::RenderData* p_data) {}
-    void Present(vkex::Application::PresentData* p_data);
-
-protected:
-    virtual void BuildSampleGPA(std::vector<vkex::CommandBuffer>& command_buffers) {}
-    virtual void BuildSamplePipelineStatistics(vkex::CommandBuffer& command_buffer) {}
-
-private:
-    vkex::ShaderProgram         m_shader_program = nullptr;
-    vkex::DescriptorSetLayout   m_descriptor_set_layout = nullptr;
-    vkex::DescriptorPool        m_descriptor_pool = nullptr;
-    vkex::DescriptorSet         m_descriptor_set = nullptr;
-    vkex::PipelineLayout        m_pipeline_layout = nullptr;
-    vkex::GraphicsPipeline      m_pipeline = nullptr;
-    ViewTransformConstants      m_view_transform_constants = {};
-    vkex::Buffer                m_constant_buffer = nullptr;
-    vkex::Buffer                m_vertex_buffer = nullptr;
-};
+#include "AppCore.h"
 
 void VkexInfoApp::Configure(const vkex::ArgParser& args, vkex::Configuration& configuration)
 {
     configuration.window.resizeable = false;
-    configuration.swapchain.depth_stencil_format = VK_FORMAT_D32_SFLOAT;
+
+    configuration.swapchain.color_format = VK_FORMAT_B8G8R8A8_SRGB;
+    configuration.swapchain.paced_frame_rate = 60;
+
     configuration.graphics_debug.enable = false;
     configuration.graphics_debug.message_severity.info = false;
     configuration.graphics_debug.message_severity.warning = false;
@@ -164,12 +122,43 @@ void VkexInfoApp::Setup()
     {
         m_descriptor_set->UpdateDescriptor(0, m_constant_buffer);
     }
+
+    // TODO: Create internal color image + view
+    // TODO: Create internal depth image + view
+    // TODO: Consider having full res internal image, and use 
+    // scissor to restrict rendered area. Fixed internal size
+    // is fine for now, but not really realistic
+
+    {
+        vkex::Result vkex_result = vkex::Result::Undefined;
+        VKEX_CALL(CreateSimpleRenderPass(GetDevice(),
+            GetConfiguration().window.width, GetConfiguration().window.height,
+            GetConfiguration().swapchain.color_format,
+            VK_FORMAT_D32_SFLOAT,
+            &m_target_res_simple_render_pass));
+    }
+
+    {
+        vkex::Result vkex_result = vkex::Result::Undefined;
+        VKEX_CALL(vkex::TransitionImageLayout(GetGraphicsQueue(), 
+            m_target_res_simple_render_pass.rtv_texture, 
+            VK_IMAGE_LAYOUT_UNDEFINED, 
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT));
+
+        vkex_result = vkex::Result::Undefined;
+        VKEX_CALL(vkex::TransitionImageLayout(GetGraphicsQueue(),
+            m_target_res_simple_render_pass.dsv_texture,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)));
+    }
 }
 
-void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
+void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
 {
     auto cmd = p_data->GetCommandBuffer();
-    auto render_pass = p_data->GetRenderPass();
+    auto render_pass = m_target_res_simple_render_pass.render_pass;
 
     float3 eye = float3(0, 0, 2);
     float3 center = float3(0, 0, 0);
@@ -200,16 +189,77 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
     cmd->CmdBindVertexBuffers(m_vertex_buffer);
     cmd->CmdDraw(36, 1, 0, 0);
 
-    std::string window = "Physical Device : " + std::string(GetDevice()->GetDescriptiveName());
-    if (ImGui::Begin(window.c_str())) {
-        DrawDebugUiPhyiscalDevice(GetDevice()->GetPhysicalDevice());
-    }
-    ImGui::End();
+    // TODO: Ensure that GUI composited onto final swapchain target
+    // TODO: Make sure this size is multiplied for current target resolution
+    // TODO: Figure out how to change FontSize?
 
-    this->DrawDebugApplicationInfo();
+    ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiCond_Once);
+    this->DrawAppInfoGUI();
     this->DrawImGui(cmd);
 
     cmd->CmdEndRenderPass();
+
+    cmd->End();
+
+    SubmitRender(p_data);
+}
+
+void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
+{
+    auto cmd = p_data->GetCommandBuffer();
+
+    auto present_render_pass = p_data->GetRenderPass();
+    auto swapchain_image = present_render_pass->GetRtvs()[0]->GetResource()->GetImage();
+    auto source_image = m_target_res_simple_render_pass.rtv_texture->GetImage();
+    
+    cmd->Begin();
+
+    // TODO: Build out helper function to merge these barriers into one
+    cmd->CmdTransitionImageLayout(m_target_res_simple_render_pass.rtv_texture, 
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+    cmd->CmdTransitionImageLayout(swapchain_image->GetVkObject(), 
+        swapchain_image->GetAspectFlags(),
+        0, swapchain_image->GetMipLevels(),
+        0, swapchain_image->GetArrayLayers(),
+        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+    VkImageCopy image_copy_region;
+    image_copy_region.srcSubresource.aspectMask = source_image->GetAspectFlags();
+    image_copy_region.srcSubresource.mipLevel = 0;
+    image_copy_region.srcSubresource.baseArrayLayer = 0;
+    image_copy_region.srcSubresource.layerCount = 1;
+    image_copy_region.srcOffset = { 0, 0, 0 };
+    image_copy_region.dstSubresource.aspectMask = swapchain_image->GetAspectFlags();
+    image_copy_region.dstSubresource.mipLevel = 0;
+    image_copy_region.dstSubresource.baseArrayLayer = 0;
+    image_copy_region.dstSubresource.layerCount = 1;
+    image_copy_region.dstOffset = { 0, 0, 0 };
+    image_copy_region.extent = source_image->GetExtent();
+
+    // TODO: Port to resolution-independent copy? Probably dispatch is easiest
+    cmd->CmdCopyImage(source_image->GetVkObject(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                      swapchain_image->GetVkObject(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                      1, &image_copy_region);
+
+    cmd->CmdTransitionImageLayout(m_target_res_simple_render_pass.rtv_texture,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+
+    cmd->CmdTransitionImageLayout(swapchain_image->GetVkObject(),
+        swapchain_image->GetAspectFlags(),
+        0, swapchain_image->GetMipLevels(),
+        0, swapchain_image->GetArrayLayers(),
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+
+
     cmd->End();
 
     SubmitPresent(p_data);
@@ -217,6 +267,7 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
 
 int main(int argc, char** argv)
 {
+    // TODO: Drive resolution from input
     VkexInfoApp app;
     vkex::Result vkex_result = app.Run(argc, argv);
     if (!vkex_result) {

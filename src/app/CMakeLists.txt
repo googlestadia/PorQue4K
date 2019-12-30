@@ -23,15 +23,15 @@ set(ASSETS_DIR   ${CMAKE_SOURCE_DIR}/assets)
 set(SHADERS_DIR  ${SRC_DIR}/shaders)
 
 list(APPEND HDR_FILES
+    ${SRC_DIR}/AppCore.h
     ${SRC_DIR}/AssetUtil.h
-    ${SRC_DIR}/DebugUI.h
     ${SRC_DIR}/SimpleRenderPass.h
 )
 
 list(APPEND SRC_FILES
     ${SRC_DIR}/main.cpp
+    ${SRC_DIR}/AppCore.cpp
     ${SRC_DIR}/AssetUtil.cpp
-    ${SRC_DIR}/DebugUI.cpp
     ${SRC_DIR}/SimpleRenderPass.cpp
 )
 
