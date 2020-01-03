@@ -42,14 +42,11 @@ void VkexInfoApp::Configure(const vkex::ArgParser& args, vkex::Configuration& co
     configuration.swapchain.color_format = VK_FORMAT_B8G8R8A8_UNORM;
     configuration.swapchain.paced_frame_rate = 60;
 
-    // TODO: We need to specify a depth format for the swapchain in order
-    // to create a depth-enabled renderpass, which gets passed to ImGui early
-    // during vkex::Application setup time. Otherwise, ImGui will not be
-    // depth aware, and validation will complain. The real solution here is
-    // to move ImGui drawing to VkexInfoApp::Present, and then we can
-    // also disable the need for a depth target (unless we want some certain
-    // ImGui rendering features)
-    configuration.swapchain.depth_stencil_format = VK_FORMAT_D32_SFLOAT;
+    // INFO: Right now, Application::InitializeVkexSwapchain() creates a renderpass
+    // for the swapchain images based on some of the config bits. Right now, it's
+    // hard-coded to load the existing contents, plus all layouts are VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL.
+    // This really should be configurable, allowing for different uses without
+    // touching the vkex lib code.
 
     configuration.graphics_debug.enable = false;
     configuration.graphics_debug.message_severity.info = false;
@@ -284,15 +281,6 @@ void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
     cmd->CmdBindVertexBuffers(m_simple_draw_vertex_buffer);
     cmd->CmdDraw(36, 1, 0, 0);
 
-    // TODO: Ensure that GUI composited onto final swapchain target
-    // TODO: Make sure this size is multiplied for current target resolution
-    // TODO: Figure out how to change FontSize?
-    // TODO: See comment in VkexInfoApp::Setup() wrt moving this to VkexInfoApp::Present
-
-    ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiCond_Once);
-    this->DrawAppInfoGUI();
-    this->DrawImGui(cmd);
-
     cmd->CmdEndRenderPass();
 
     cmd->End();
@@ -351,6 +339,35 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
             0, swapchain_image->GetMipLevels(),
             0, swapchain_image->GetArrayLayers(),
             VK_IMAGE_LAYOUT_GENERAL,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+
+        auto swapchain_render_pass = p_data->GetRenderPass();
+
+        VkClearValue rtv_clear = {};
+        VkClearValue dsv_clear = {};
+        dsv_clear.depthStencil.depth = 1.0f;
+        dsv_clear.depthStencil.stencil = 0xFF;
+        std::vector<VkClearValue> clear_values = { rtv_clear, dsv_clear };
+
+        cmd->CmdBeginRenderPass(swapchain_render_pass, &clear_values);
+        cmd->CmdSetViewport(swapchain_render_pass->GetFullRenderArea());
+        cmd->CmdSetScissor(swapchain_render_pass->GetFullRenderArea());
+        
+        // TODO: Make sure this size is multiplied for current target resolution
+        // TODO: Figure out how to change FontSize?
+
+        ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiCond_Once);
+        this->DrawAppInfoGUI();
+        this->DrawImGui(cmd);
+
+        cmd->CmdEndRenderPass();
+
+        cmd->CmdTransitionImageLayout(swapchain_image->GetVkObject(),
+            swapchain_image->GetAspectFlags(),
+            0, swapchain_image->GetMipLevels(),
+            0, swapchain_image->GetArrayLayers(),
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
             VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
     }

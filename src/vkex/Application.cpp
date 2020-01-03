@@ -1081,14 +1081,16 @@ vkex::Result Application::InitializeVkexSwapchain()
         vkex::ImageView image_view = m_color_image_views[image_index];
         // Fill out RTV
         vkex::RenderTargetViewCreateInfo create_info ={};
-        create_info.format        = image_view->GetFormat();
-        create_info.samples       = image_view->GetSamples();
-        create_info.load_op       = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        create_info.store_op      = VK_ATTACHMENT_STORE_OP_STORE;
-        create_info.final_layout  = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        create_info.clear_value   = m_configuration.swapchain.rtv_clear_value;
-        create_info.attachment      = image_view;
-        create_info.resolve       = nullptr;
+        create_info.format         = image_view->GetFormat();
+        create_info.samples        = image_view->GetSamples();
+        create_info.load_op        = VK_ATTACHMENT_LOAD_OP_LOAD;
+        create_info.store_op       = VK_ATTACHMENT_STORE_OP_STORE;
+        create_info.initial_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        create_info.render_layout  = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        create_info.final_layout   = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        create_info.clear_value    = m_configuration.swapchain.rtv_clear_value;
+        create_info.attachment     = image_view;
+        create_info.resolve        = nullptr;
         vkex::Result vkex_result = vkex::Result::Undefined;
         VKEX_RESULT_CALL(
           vkex_result,
