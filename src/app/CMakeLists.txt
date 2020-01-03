@@ -35,21 +35,35 @@ list(APPEND SRC_FILES
     ${SRC_DIR}/SimpleRenderPass.cpp
 )
 
-list(APPEND SHADER_FILES
+list(APPEND VSPS_SHADER_FILES
   ${SHADERS_DIR}/draw_vertex.hlsl
 )
 
-source_group ("Shaders" FILES
-  ${SHADER_FILES}
+list(APPEND CS_SHADER_FILES
+  ${SHADERS_DIR}/copy_texture.hlsl
+)
+
+source_group ("Shaders\\VsPs" FILES
+  ${VSPS_SHADER_FILES}
+)
+
+source_group ("Shaders\\Cs" FILES
+  ${CS_SHADER_FILES}
 )
 
 if (BUILD_SHADERS)
-  compile_hlsl_vs_ps(${SHADERS_DIR}/draw_vertex.hlsl ${ASSETS_DIR}/shaders ${CMAKE_CURRENT_SOURCE_DIR})
+  foreach(VSPS_SHADER_PATH ${VSPS_SHADER_FILES})
+    compile_hlsl_vs_ps(${VSPS_SHADER_PATH} ${ASSETS_DIR}/shaders ${CMAKE_CURRENT_SOURCE_DIR})
+  endforeach()
+  foreach(CS_SHADER_PATH ${CS_SHADER_FILES})
+    compile_hlsl_cs(${CS_SHADER_PATH} ${ASSETS_DIR}/shaders ${CMAKE_CURRENT_SOURCE_DIR})
+  endforeach()
 else()
-  set_source_files_properties(${SHADER_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
+  set_source_files_properties(${VSPS_SHADER_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
+  set_source_files_properties(${CS_SHADER_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
 endif()
 
-add_executable(${PROJECT_NAME} ${HDR_FILES} ${SRC_FILES} ${SHADER_FILES})
+add_executable(${PROJECT_NAME} ${HDR_FILES} ${SRC_FILES} ${VSPS_SHADER_FILES} ${CS_SHADER_FILES})
 
 target_include_directories(${PROJECT_NAME} 
   PRIVATE   ${SRC_DIR}

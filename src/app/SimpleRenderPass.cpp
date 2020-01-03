@@ -26,7 +26,8 @@ vkex::Result CreateSimpleRenderPass(
         create_info.image.samples = VK_SAMPLE_COUNT_1_BIT;
         create_info.image.tiling = VK_IMAGE_TILING_OPTIMAL;
         create_info.image.usage_flags.bits.color_attachment = true;
-        create_info.image.usage_flags.bits.transfer_src = true;
+        create_info.image.usage_flags.bits.transfer_src = true; // Needed?
+        create_info.image.usage_flags.bits.sampled = true;
         create_info.image.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
         create_info.image.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
         create_info.image.committed = true;

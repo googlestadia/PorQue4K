@@ -28,11 +28,22 @@ using float2x2 = vkex::float2x2;
 using float3x3 = vkex::float3x3;
 using float4x4 = vkex::float4x4;
 
+using uint = vkex::uint;
+
 struct ViewTransformData {
     float4x4 ModelViewProjectionMatrix;
 };
 
 using ViewTransformConstants = vkex::ConstantBufferData<ViewTransformData>;
+
+struct ScaledTexCopyDimensionsData {
+    uint srcWidth, srcHeight;
+    uint dstWidth, dstHeight;
+};
+
+using ScaledTexCopyDimsConstants = vkex::ConstantBufferData<ScaledTexCopyDimensionsData>;
+
+// TODO: Move constant struct defs to another file to share with shaders
 
 class VkexInfoApp
     : public vkex::Application
@@ -51,15 +62,24 @@ protected:
     void DrawAppInfoGUI();
 
 private:
-    vkex::ShaderProgram         m_shader_program = nullptr;
-    vkex::DescriptorSetLayout   m_descriptor_set_layout = nullptr;
     vkex::DescriptorPool        m_descriptor_pool = nullptr;
-    vkex::DescriptorSet         m_descriptor_set = nullptr;
-    vkex::PipelineLayout        m_pipeline_layout = nullptr;
-    vkex::GraphicsPipeline      m_pipeline = nullptr;
-    ViewTransformConstants      m_view_transform_constants = {};
-    vkex::Buffer                m_constant_buffer = nullptr;
-    vkex::Buffer                m_vertex_buffer = nullptr;
+
+    vkex::ShaderProgram         m_simple_draw_shader_program = nullptr;
+    vkex::DescriptorSetLayout   m_simple_draw_descriptor_set_layout = nullptr;
+    vkex::DescriptorSet         m_simple_draw_descriptor_set = nullptr;
+    vkex::PipelineLayout        m_simple_draw_pipeline_layout = nullptr;
+    vkex::GraphicsPipeline      m_simple_draw_pipeline = nullptr;
+    ViewTransformConstants      m_simple_draw_view_transform_constants = {};
+    vkex::Buffer                m_simple_draw_constant_buffer = nullptr;
+    vkex::Buffer                m_simple_draw_vertex_buffer = nullptr;
+
+    vkex::ShaderProgram         m_scaled_tex_copy_shader_program = nullptr;
+    vkex::DescriptorSetLayout   m_scaled_tex_copy_descriptor_set_layout = nullptr;
+    vkex::DescriptorSet         m_scaled_tex_copy_descriptor_set = nullptr;
+    vkex::PipelineLayout        m_scaled_tex_copy_pipeline_layout = nullptr;
+    vkex::ComputePipeline       m_scaled_tex_copy_pipeline = nullptr;
+    ScaledTexCopyDimsConstants  m_scaled_tex_copy_dims_constants = {};
+    vkex::Buffer                m_scaled_tex_copy_constant_buffer = nullptr;
 
     SimpleRenderPass            m_target_res_simple_render_pass = {};
 };
