@@ -1,5 +1,5 @@
 /*
- Copyright 2019 Google Inc.
+ Copyright 2019-2020 Google Inc.
  
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -19,10 +19,6 @@
 #include "AssetUtil.h"
 
 #include "AppCore.h"
-
-// TODO: Quarter res target
-// * Create 1/4 res renderpass
-// * Switch between constant buffers for resolution params
 
 // TODO: Simplify shader management
 // * Move constant buffer structs to another file?
@@ -63,17 +59,29 @@ void VkexInfoApp::Setup()
     vkex::PlatonicSolid cube = vkex::PlatonicSolid::Cube(cube_options);
     const vkex::VertexBufferData* p_vertex_buffer_data = cube.GetVertexBufferByIndex(0);
 
-    // Target res renderpass
+    // Geometry draw renderpasses at different resolutions
     {
         vkex::Result vkex_result = vkex::Result::Undefined;
         VKEX_CALL(CreateSimpleRenderPass(GetDevice(),
             GetConfiguration().window.width, GetConfiguration().window.height,
             GetConfiguration().swapchain.color_format,
             VK_FORMAT_D32_SFLOAT,
-            &m_target_res_simple_render_pass));
+            &m_target_res_draw.simple_render_pass));
+    }
+    {
+        vkex::Result vkex_result = vkex::Result::Undefined;
+        VKEX_CALL(CreateSimpleRenderPass(GetDevice(),
+            GetConfiguration().window.width / 2, GetConfiguration().window.height / 2,
+            GetConfiguration().swapchain.color_format,
+            VK_FORMAT_D32_SFLOAT,
+            &m_half_res_draw.simple_render_pass));
     }
 
-    // Shader program
+    // TODO: Future shader infrastructure
+    // 1. create shader programs + descriptor layouts + pipeline layout + pipeline
+    // 2. Specify descriptor pool sizes + create pool + allocate descriptors according to requests
+
+    // Shaders
     {
         VKEX_CALL(asset_util::CreateShaderProgram(
             GetDevice(),
@@ -98,28 +106,6 @@ void VkexInfoApp::Setup()
         const vkex::ShaderInterface& shader_interface = m_scaled_tex_copy_shader_program->GetInterface();
         vkex::DescriptorSetLayoutCreateInfo create_info = ToVkexCreateInfo(shader_interface.GetSet(0));
         VKEX_CALL(GetDevice()->CreateDescriptorSetLayout(create_info, &m_scaled_tex_copy_descriptor_set_layout));
-    }
-
-    // Descriptor pool
-    {
-        const vkex::ShaderInterface& shader_interface = m_simple_draw_shader_program->GetInterface();
-        const vkex::ShaderInterface& scaled_tex_copy_interface = m_scaled_tex_copy_shader_program->GetInterface();
-        vkex::DescriptorPoolCreateInfo create_info = {};
-        create_info.pool_sizes = shader_interface.GetDescriptorPoolSizes();
-        create_info.pool_sizes += scaled_tex_copy_interface.GetDescriptorPoolSizes();
-        VKEX_CALL(GetDevice()->CreateDescriptorPool(create_info, &m_descriptor_pool));
-    }
-
-    // Descriptor sets
-    {
-        vkex::DescriptorSetAllocateInfo allocate_info = {};
-        allocate_info.layouts.push_back(m_simple_draw_descriptor_set_layout);
-        VKEX_CALL(m_descriptor_pool->AllocateDescriptorSets(allocate_info, &m_simple_draw_descriptor_set));
-    }
-    {
-        vkex::DescriptorSetAllocateInfo allocate_info = {};
-        allocate_info.layouts.push_back(m_scaled_tex_copy_descriptor_set_layout);
-        VKEX_CALL(m_descriptor_pool->AllocateDescriptorSets(allocate_info, &m_scaled_tex_copy_descriptor_set));
     }
 
     // Pipeline layout
@@ -147,9 +133,9 @@ void VkexInfoApp::Setup()
         create_info.depth_test_enable = true;
         create_info.depth_write_enable = true;
         create_info.pipeline_layout = m_simple_draw_pipeline_layout;
-        create_info.rtv_formats = { m_target_res_simple_render_pass.rtv->GetFormat() };
-        create_info.dsv_format = m_target_res_simple_render_pass.dsv->GetFormat();
-        create_info.render_pass = m_target_res_simple_render_pass.render_pass;
+        create_info.rtv_formats = { m_target_res_draw.simple_render_pass.rtv->GetFormat() };
+        create_info.dsv_format = m_target_res_draw.simple_render_pass.dsv->GetFormat();
+        create_info.render_pass = m_target_res_draw.simple_render_pass.render_pass;
         vkex::Result vkex_result = vkex::Result::Undefined;
         VKEX_CALL(GetDevice()->CreateGraphicsPipeline(create_info, &m_simple_draw_pipeline));
     }
@@ -162,6 +148,41 @@ void VkexInfoApp::Setup()
         VKEX_CALL(GetDevice()->CreateComputePipeline(create_info, &m_scaled_tex_copy_pipeline));
     }
 
+    // Descriptor pool
+    {
+        const vkex::ShaderInterface& simple_draw_shader_interface = m_simple_draw_shader_program->GetInterface();
+        const vkex::ShaderInterface& scaled_tex_copy_interface = m_scaled_tex_copy_shader_program->GetInterface();
+        vkex::DescriptorPoolCreateInfo create_info = {};
+        create_info.pool_sizes = simple_draw_shader_interface.GetDescriptorPoolSizes();
+
+        auto scaled_tex_copy_descriptor_pool_sizes = scaled_tex_copy_interface.GetDescriptorPoolSizes();
+        scaled_tex_copy_descriptor_pool_sizes *= 2; // One for half-res, one for full-res
+        create_info.pool_sizes += scaled_tex_copy_descriptor_pool_sizes;
+
+        VKEX_CALL(GetDevice()->CreateDescriptorPool(create_info, &m_descriptor_pool));
+
+        // TODO: Refactor how shaders make their allocation requests for descriptors
+        // For draws and upscales, they probably just need one descriptor set in place
+        // unless something needs to be updated every frame (then one per swapchain image
+        // synchronized on some submit fence). The target -> swapchain copy will need
+        // one descriptor per swapchain image, since presents are synchronized on
+        // acquire next image
+    }
+
+    // Descriptor sets
+    {
+        vkex::DescriptorSetAllocateInfo allocate_info = {};
+        allocate_info.layouts.push_back(m_simple_draw_descriptor_set_layout);
+        VKEX_CALL(m_descriptor_pool->AllocateDescriptorSets(allocate_info, &m_simple_draw_descriptor_set));
+    }
+    {
+        vkex::DescriptorSetAllocateInfo allocate_info = {};
+        allocate_info.layouts.push_back(m_scaled_tex_copy_descriptor_set_layout);
+        VKEX_CALL(m_descriptor_pool->AllocateDescriptorSets(allocate_info, &m_target_res_draw.scaled_tex_copy_descriptor_set));
+        VKEX_CALL(m_descriptor_pool->AllocateDescriptorSets(allocate_info, &m_half_res_draw.scaled_tex_copy_descriptor_set));
+    }
+
+    // Draw constants buffer, vertex buffer + binding
     // Constant buffer
     {
         VKEX_CALL(asset_util::CreateConstantBuffer(
@@ -193,56 +214,107 @@ void VkexInfoApp::Setup()
         // TODO: If we change to MEMORY_USAGE_GPU_ONLY, we can use vkex::CopyResource
         // and then have multiple constants buffers with this data floating around...
         VKEX_CALL(asset_util::CreateConstantBuffer(
-            m_scaled_tex_copy_dims_constants.size,
+            m_target_res_draw.scaled_tex_copy_dims_constants.size,
             nullptr,
             GetGraphicsQueue(),
             asset_util::MEMORY_USAGE_CPU_TO_GPU,
-            &m_scaled_tex_copy_constant_buffer));
+            &m_target_res_draw.scaled_tex_copy_constant_buffer));
     }
     {
-        m_scaled_tex_copy_dims_constants.data.srcWidth = 1920;
-        m_scaled_tex_copy_dims_constants.data.srcHeight = 1080;
-        m_scaled_tex_copy_dims_constants.data.dstWidth = 1920;
-        m_scaled_tex_copy_dims_constants.data.dstHeight = 1080;
+        VKEX_CALL(asset_util::CreateConstantBuffer(
+            m_half_res_draw.scaled_tex_copy_dims_constants.size,
+            nullptr,
+            GetGraphicsQueue(),
+            asset_util::MEMORY_USAGE_CPU_TO_GPU,
+            &m_half_res_draw.scaled_tex_copy_constant_buffer));
+    }
 
-        VKEX_CALL(m_scaled_tex_copy_constant_buffer->Copy(m_scaled_tex_copy_dims_constants.size, &m_scaled_tex_copy_dims_constants.data));
+    {
+        m_target_res_draw.scaled_tex_copy_dims_constants.data.srcWidth = 1920;
+        m_target_res_draw.scaled_tex_copy_dims_constants.data.srcHeight = 1080;
+        m_target_res_draw.scaled_tex_copy_dims_constants.data.dstWidth = 1920;
+        m_target_res_draw.scaled_tex_copy_dims_constants.data.dstHeight = 1080;
+
+        VKEX_CALL(m_target_res_draw.scaled_tex_copy_constant_buffer->Copy(
+            m_target_res_draw.scaled_tex_copy_dims_constants.size,
+            &m_target_res_draw.scaled_tex_copy_dims_constants.data));
     }
     {
-        m_scaled_tex_copy_descriptor_set->UpdateDescriptor(0, m_scaled_tex_copy_constant_buffer);
+        m_half_res_draw.scaled_tex_copy_dims_constants.data.srcWidth = 960;
+        m_half_res_draw.scaled_tex_copy_dims_constants.data.srcHeight = 540;
+        m_half_res_draw.scaled_tex_copy_dims_constants.data.dstWidth = 1920;
+        m_half_res_draw.scaled_tex_copy_dims_constants.data.dstHeight = 1080;
+
+        VKEX_CALL(m_half_res_draw.scaled_tex_copy_constant_buffer->Copy(
+            m_half_res_draw.scaled_tex_copy_dims_constants.size,
+            &m_half_res_draw.scaled_tex_copy_dims_constants.data));
     }
 
-    // TODO: Create internal color image + view
-    // TODO: Create internal depth image + view
+    {
+        // TODO: It would be nice to have this grab the binding via the name instead of magically knowing
+        // the binding here :p (TBH, all of that could be done offline as well, but whatever)
+        m_target_res_draw.scaled_tex_copy_descriptor_set->UpdateDescriptor(0, m_target_res_draw.scaled_tex_copy_constant_buffer);
+        m_half_res_draw.scaled_tex_copy_descriptor_set->UpdateDescriptor(0, m_half_res_draw.scaled_tex_copy_constant_buffer);
+
+        m_target_res_draw.scaled_tex_copy_descriptor_set->UpdateDescriptor(1, m_target_res_draw.simple_render_pass.rtv_texture);
+        m_half_res_draw.scaled_tex_copy_descriptor_set->UpdateDescriptor(1, m_half_res_draw.simple_render_pass.rtv_texture);
+    }
+
     // TODO: Consider having full res internal image, and use 
-    // scissor to restrict rendered area. Fixed internal size
+    // scissor/viewport to restrict rendered area. Fixed internal size
     // is fine for now, but not really realistic
 
+    // TODO: Create separate internal + target images
+
+    // Image transitions
+    // TODO: When we create textures, can we specify an initial layout?
     {
         vkex::Result vkex_result = vkex::Result::Undefined;
         VKEX_CALL(vkex::TransitionImageLayout(GetGraphicsQueue(), 
-            m_target_res_simple_render_pass.rtv_texture, 
+            m_target_res_draw.simple_render_pass.rtv_texture,
             VK_IMAGE_LAYOUT_UNDEFINED, 
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT));
 
         vkex_result = vkex::Result::Undefined;
         VKEX_CALL(vkex::TransitionImageLayout(GetGraphicsQueue(),
-            m_target_res_simple_render_pass.dsv_texture,
+            m_target_res_draw.simple_render_pass.dsv_texture,
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)));
     }
     {
-        // TODO: It would be nice to have this grab the binding via the texture name instead of magically knowing
-        // the binding here :p (TBH, all of that could be done offline as well, but whatever)
-        m_scaled_tex_copy_descriptor_set->UpdateDescriptor(1, m_target_res_simple_render_pass.rtv_texture);
+        vkex::Result vkex_result = vkex::Result::Undefined;
+        VKEX_CALL(vkex::TransitionImageLayout(GetGraphicsQueue(),
+            m_half_res_draw.simple_render_pass.rtv_texture,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT));
+
+        vkex_result = vkex::Result::Undefined;
+        VKEX_CALL(vkex::TransitionImageLayout(GetGraphicsQueue(),
+            m_half_res_draw.simple_render_pass.dsv_texture,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)));
+    }
+}
+
+void VkexInfoApp::Update(double frame_elapsed_time)
+{
+    if (m_internal_res_selector == InternalResolution::Full) {
+        m_current_internal_draw = &m_target_res_draw;
+    } else if (m_internal_res_selector == InternalResolution::Half) {
+        m_current_internal_draw = &m_half_res_draw;
     }
 }
 
 void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
 {
     auto cmd = p_data->GetCommandBuffer();
-    auto render_pass = m_target_res_simple_render_pass.render_pass;
+
+    // TODO: Render to all internal resolutions in order to have delta visualization
+    auto render_pass = m_current_internal_draw->simple_render_pass.render_pass;
 
     float3 eye = float3(0, 0, 2);
     float3 center = float3(0, 0, 0);
@@ -283,6 +355,9 @@ void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
 
     cmd->CmdEndRenderPass();
 
+    // TODO: Perform upscale or visualization to 'final' target here
+    // Final target will then be copied to swapchain in Present
+
     cmd->End();
 
     SubmitRender(p_data);
@@ -294,14 +369,16 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
 
     auto present_render_pass = p_data->GetRenderPass();
     auto swapchain_image = present_render_pass->GetRtvs()[0]->GetResource()->GetImage();
-    auto source_image = m_target_res_simple_render_pass.rtv_texture->GetImage();
 
     {
+        // TODO: This isn't really a good way to do this, updating the descriptors on the fly
+        // Might as well just have one set of descriptors per swapchain image
+        // or maybe two descriptor sets per shader (one for fixed inputs, one for outputs)
         VkDescriptorImageInfo info = {};
         info.sampler = VK_NULL_HANDLE;
         info.imageView = *(present_render_pass->GetRtvs()[0]->GetResource());
         info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-        m_scaled_tex_copy_descriptor_set->UpdateDescriptors(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 0, 1, &info);
+        m_current_internal_draw->scaled_tex_copy_descriptor_set->UpdateDescriptors(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 0, 1, &info);
 
         // TODO: Add UpdateDescriptor helper for ImageViews?
     }
@@ -309,7 +386,7 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
     cmd->Begin();
 
     {
-        cmd->CmdTransitionImageLayout(m_target_res_simple_render_pass.rtv_texture,
+        cmd->CmdTransitionImageLayout(m_current_internal_draw->simple_render_pass.rtv_texture,
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
@@ -323,13 +400,20 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
         cmd->CmdBindPipeline(m_scaled_tex_copy_pipeline);
-        cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE, *m_scaled_tex_copy_pipeline_layout, 0, { *m_scaled_tex_copy_descriptor_set });
+        cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE, *m_scaled_tex_copy_pipeline_layout, 0, { *m_current_internal_draw->scaled_tex_copy_descriptor_set });
         
+        // TODO: Select between visualizations or draws
+        // TODO: Perhaps we should do the upscale or visualization to another internal
+        //       full-res texture, and then do the copy from that to the swapchain.
+        //       The reason being that the descriptor set complexity is greatly
+        //       simplified if we don't have to worry about the swapchain images
+        //       for all dispatches.
+
         // TODO: Automate (image size / thread group size)
         vkex::uint3 dispatchDims = { 120, 68, 1 };
         cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
 
-        cmd->CmdTransitionImageLayout(m_target_res_simple_render_pass.rtv_texture,
+        cmd->CmdTransitionImageLayout(m_current_internal_draw->simple_render_pass.rtv_texture,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);

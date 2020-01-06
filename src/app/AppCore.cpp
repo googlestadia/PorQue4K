@@ -122,11 +122,8 @@ void VkexInfoApp::DrawAppInfoGUI()
         
         ImGui::Separator();
 
-        // TODO: Upscale info
+        // Upscale info
         {
-            // TODO: Internal Resolution
-            // TODO: Target Resolution
-            // TODO: Swapchain resolution??
             // TODO: Upscale selector
             // TODO: Visualizer selector
             //          Target res
@@ -134,7 +131,15 @@ void VkexInfoApp::DrawAppInfoGUI()
             //          Delta visualizers...
             ImGui::Columns(2);
             {
-                auto target_res_extent = m_target_res_simple_render_pass.rtv_texture->GetImage()->GetExtent();
+                ImGui::Text("Internal resolution");
+                ImGui::NextColumn();
+                const char* items[] = { "Native", "Half", };
+                ImGui::Combo("", (int*)(&m_internal_res_selector), items, IM_ARRAYSIZE(items));
+                ImGui::NextColumn();
+            }
+            {
+                //auto target_res_extent = m_target_res_internal_draw.simple_render_pass.rtv_texture->GetImage()->GetExtent();
+                auto target_res_extent = m_current_internal_draw->simple_render_pass.rtv_texture->GetImage()->GetExtent();
                 ImGui::Text("Target Resolution");
                 ImGui::NextColumn();
                 ImGui::Text("%d x %d", target_res_extent.width, target_res_extent.height);

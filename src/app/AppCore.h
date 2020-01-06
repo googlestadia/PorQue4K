@@ -54,7 +54,7 @@ public:
 
     void Configure(const vkex::ArgParser& args, vkex::Configuration& configuration);
     void Setup();
-    void Update(double frame_elapsed_time) {}
+    void Update(double frame_elapsed_time);
     void Render(vkex::Application::RenderData* p_data);
     void Present(vkex::Application::PresentData* p_data);
 
@@ -62,6 +62,9 @@ protected:
     void DrawAppInfoGUI();
 
 private:
+    // TODO: Once these start getting grouped, I'll have to think about
+    // what things belong to a pass versus a shader. The descriptor sets
+    // that get allocated will be in different quantities depending on usage
     vkex::DescriptorPool        m_descriptor_pool = nullptr;
 
     vkex::ShaderProgram         m_simple_draw_shader_program = nullptr;
@@ -75,13 +78,39 @@ private:
 
     vkex::ShaderProgram         m_scaled_tex_copy_shader_program = nullptr;
     vkex::DescriptorSetLayout   m_scaled_tex_copy_descriptor_set_layout = nullptr;
-    vkex::DescriptorSet         m_scaled_tex_copy_descriptor_set = nullptr;
     vkex::PipelineLayout        m_scaled_tex_copy_pipeline_layout = nullptr;
     vkex::ComputePipeline       m_scaled_tex_copy_pipeline = nullptr;
-    ScaledTexCopyDimsConstants  m_scaled_tex_copy_dims_constants = {};
-    vkex::Buffer                m_scaled_tex_copy_constant_buffer = nullptr;
 
-    SimpleRenderPass            m_target_res_simple_render_pass = {};
+    struct InternalDrawState {
+        ScaledTexCopyDimsConstants  scaled_tex_copy_dims_constants = {};
+        vkex::Buffer                scaled_tex_copy_constant_buffer = nullptr;
+        
+        vkex::DescriptorSet         scaled_tex_copy_descriptor_set = nullptr;
+
+        SimpleRenderPass            simple_render_pass = {};
+    };
+
+    InternalDrawState                m_target_res_draw;
+    InternalDrawState                m_half_res_draw;
+    InternalDrawState*               m_current_internal_draw = nullptr;
+
+    // TODO: Map out descriptor sets + descriptor pool layout
+
+    enum InternalResolution {
+        Full = 0,
+        Half = 1,
+        // TODO: Dynamic?
+        // TODO: If our target resolutions are 1080p and 4K, we could
+        //       just have three internal resolutions per target resolution
+        //       1080p: 540p, 720p, 1080p
+        //       4K: 1080p, 1440p, 2160p
+        //       This also would extend to other target resolutions.
+        //       Our chain would be Internal -> Target -> Swapchain
+        //       Render to Internal resolution and Target resolution
+        //       Upscale/visualize to Target resolution
+        //       Copy to swapchain
+    };
+    InternalResolution               m_internal_res_selector = InternalResolution::Full;
 };
 
 #endif // __APP_CORE_H__
