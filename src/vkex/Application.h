@@ -359,7 +359,7 @@ public:
     ~RenderData();
     uint32_t            GetFrameIndex() const { return m_frame_index; }
     vkex::CommandBuffer GetCommandBuffer() { return m_work_cmd; }
-    vkex::Semaphore     GetWorkCompleteSemaphore() const {return m_work_complete_semaphore; }
+    vkex::Semaphore     GetWorkCompleteSemaphore() const { return m_work_complete_semaphore; }
   private:
     friend class vkex::Application;
     vkex::Result InternalCreate(vkex::Device device, uint32_t frame_index, vkex::CommandBuffer cmd);
@@ -369,6 +369,7 @@ public:
     uint32_t            m_frame_index = UINT32_MAX;
     vkex::CommandBuffer m_work_cmd = nullptr;
     vkex::Semaphore     m_work_complete_semaphore = nullptr;
+    vkex::Fence         m_work_complete_fence = nullptr;
   };
 
   /** @class PresentData
@@ -636,6 +637,9 @@ private:
   //! @fn CheckConfiguration
   vkex::Result CheckConfiguration();
 
+  //! @fn ProcessRenderFence
+  vkex::Result ProcessRenderFence(Application::RenderData* p_data);
+
   //! @fn ProcessFrameFence
   vkex::Result ProcessFrameFence();
 
@@ -703,6 +707,7 @@ protected:
   vkex::CommandPool             m_present_command_pool = nullptr;
   PresentData*                  m_current_present_data = nullptr;
   PresentData*                  m_previous_present_data = nullptr;
+  // TODO: This should eventually be pushed into PresentData?
   vkex::Fence                   m_frame_fence = nullptr;
 
   vkex::DescriptorPool          m_imgui_descriptor_pool = nullptr;

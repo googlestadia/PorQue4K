@@ -354,6 +354,20 @@ vkex::Result Application::RenderData::InternalCreate(vkex::Device device, uint32
     }
   }
 
+  // Work complete fence
+  {
+    vkex::FenceCreateInfo create_info = {};
+    create_info.flags.bits.signaled = true;
+    vkex::Result vkex_result = vkex::Result::Undefined;
+    VKEX_RESULT_CALL(
+      vkex_result,
+      m_device->CreateFence(create_info, &m_work_complete_fence);
+    );
+    if (!vkex_result) {
+      return vkex_result;
+    }
+  }
+
   return vkex::Result::Success;
 }
 
@@ -369,6 +383,18 @@ vkex::Result Application::RenderData::InternalDestroy()
     if (!vkex_result) {
       return vkex_result;
     }   
+  }
+
+  // Work complete fence
+  if (m_work_complete_fence != nullptr) {
+    vkex::Result vkex_result = vkex::Result::Undefined;
+    VKEX_RESULT_CALL(
+      vkex_result, 
+      m_device->DestroyFence(m_work_complete_fence)
+    );
+    if (!vkex_result) {
+      return vkex_result;
+    }
   }
 
   return vkex::Result::Success;
@@ -1843,6 +1869,29 @@ vkex::Result Application::CheckConfiguration()
   return vkex::Result::Success;
 }
 
+vkex::Result vkex::Application::ProcessRenderFence(Application::RenderData * p_data)
+{
+    VkResult vk_result = InvalidValue<VkResult>::Value;
+    VKEX_VULKAN_RESULT_CALL(
+        vk_result,
+        p_data->m_work_complete_fence->WaitForFence()
+    );
+    if (vk_result != VK_SUCCESS) {
+        return vkex::Result(vk_result);
+    }
+
+    vk_result = InvalidValue<VkResult>::Value;
+    VKEX_VULKAN_RESULT_CALL(
+        vk_result,
+        p_data->m_work_complete_fence->ResetFence()
+    );
+    if (vk_result != VK_SUCCESS) {
+        return vkex::Result(vk_result);
+    }
+
+    return vkex::Result::Success;
+}
+
 vkex::Result Application::ProcessFrameFence()
 {
   if (!IsApplicationModeWindow()) {
@@ -2168,6 +2217,7 @@ vkex::Result Application::SubmitRender(Application::RenderData* p_data)
     std::vector<VkCommandBuffer> vk_command_buffers = { vk_command_buffer };
     std::vector<VkPipelineStageFlags> vk_pipeline_stages = { vk_pipeline_stage };
     std::vector<VkSemaphore> vk_signal_semaphores = { vk_work_complete_semaphore };
+    VkFence vk_work_complete_fence = *(p_data->m_work_complete_fence);
 
     VkSubmitInfo vk_submit_info = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
     vk_submit_info.waitSemaphoreCount = CountU32(vk_wait_semaphores);
@@ -2185,7 +2235,7 @@ vkex::Result Application::SubmitRender(Application::RenderData* p_data)
             *m_graphics_queue,
             1,
             &vk_submit_info,
-            VK_NULL_HANDLE)
+            vk_work_complete_fence)
     );
     if (vk_result != VK_SUCCESS) {
         return vkex::Result(vk_result);
@@ -2584,6 +2634,13 @@ vkex::Result Application::Run(int argn, const char* const* argv)
  
     // Call app render
     {
+      {
+        vkex::Result vkex_result = ProcessRenderFence(m_current_render_data);
+        if (!vkex_result) {
+          return vkex_result;
+        }
+      }
+
       double start_time = GetElapsedTime();
       DispatchCallRender(m_current_render_data);
       double end_time = GetElapsedTime();

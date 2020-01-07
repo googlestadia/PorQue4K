@@ -30,6 +30,8 @@ using float4x4 = vkex::float4x4;
 
 using uint = vkex::uint;
 
+// TODO: Move constant struct defs to another file to share with shaders
+
 struct ViewTransformData {
     float4x4 ModelViewProjectionMatrix;
 };
@@ -43,7 +45,35 @@ struct ScaledTexCopyDimensionsData {
 
 using ScaledTexCopyDimsConstants = vkex::ConstantBufferData<ScaledTexCopyDimensionsData>;
 
-// TODO: Move constant struct defs to another file to share with shaders
+
+enum ShaderPipelineType {
+    Graphics = 0,
+    Compute = 1,
+};
+
+enum AppShaderList {
+    Geometry = 0,
+    ScaledTexCopy = 1,
+    NumTypes,
+};
+
+struct ShaderProgramInputs {
+    ShaderPipelineType pipeline_type;
+    std::vector<vkex::fs::path> shader_paths;
+    vkex::GraphicsPipelineCreateInfo graphics_pipeline_create_info;
+};
+
+struct GeneratedShaderState {
+    ShaderPipelineType          pipeline_type;
+    vkex::ShaderProgram         program = nullptr;
+    vkex::DescriptorSetLayout   descriptor_set_layout = nullptr;
+    vkex::PipelineLayout        pipeline_layout = nullptr;
+    union {
+        vkex::GraphicsPipeline  graphics_pipeline = nullptr;
+        vkex::ComputePipeline   compute_pipeline;
+    };
+    std::vector<vkex::DescriptorSet> descriptor_sets;
+};
 
 class VkexInfoApp
     : public vkex::Application
@@ -61,40 +91,33 @@ public:
 protected:
     void DrawAppInfoGUI();
 
-private:
-    // TODO: Once these start getting grouped, I'll have to think about
-    // what things belong to a pass versus a shader. The descriptor sets
-    // that get allocated will be in different quantities depending on usage
-    vkex::DescriptorPool        m_descriptor_pool = nullptr;
+    void SetupShaders(const std::vector<ShaderProgramInputs>& shader_inputs,
+                            std::vector<GeneratedShaderState>& generated_shader_states);
 
-    vkex::ShaderProgram         m_simple_draw_shader_program = nullptr;
-    vkex::DescriptorSetLayout   m_simple_draw_descriptor_set_layout = nullptr;
-    vkex::DescriptorSet         m_simple_draw_descriptor_set = nullptr;
-    vkex::PipelineLayout        m_simple_draw_pipeline_layout = nullptr;
-    vkex::GraphicsPipeline      m_simple_draw_pipeline = nullptr;
-    ViewTransformConstants      m_simple_draw_view_transform_constants = {};
-    vkex::Buffer                m_simple_draw_constant_buffer = nullptr;
+private:
+    std::vector<GeneratedShaderState> m_generated_shader_states;
+    vkex::DescriptorPool              m_shared_descriptor_pool = nullptr;
+
     vkex::Buffer                m_simple_draw_vertex_buffer = nullptr;
 
-    vkex::ShaderProgram         m_scaled_tex_copy_shader_program = nullptr;
-    vkex::DescriptorSetLayout   m_scaled_tex_copy_descriptor_set_layout = nullptr;
-    vkex::PipelineLayout        m_scaled_tex_copy_pipeline_layout = nullptr;
-    vkex::ComputePipeline       m_scaled_tex_copy_pipeline = nullptr;
+    // TODO: Is there a struct we can use to manage the CPU/GPU copies of constant data?
+    ViewTransformConstants      m_simple_draw_view_transform_constants = {};
+    std::vector<vkex::Buffer>   m_simple_draw_constant_buffers;
+
+    ScaledTexCopyDimsConstants  m_scaled_tex_copy_dims_constants = {};
+    std::vector<vkex::Buffer>   m_scaled_tex_copy_constant_buffers;
 
     struct InternalDrawState {
-        ScaledTexCopyDimsConstants  scaled_tex_copy_dims_constants = {};
-        vkex::Buffer                scaled_tex_copy_constant_buffer = nullptr;
-        
-        vkex::DescriptorSet         scaled_tex_copy_descriptor_set = nullptr;
-
+        // TODO: Port this a single render-pass, and update the viewport/scissor
+        // per frame, along with constant buffer params!
         SimpleRenderPass            simple_render_pass = {};
     };
 
+    // TODO: This will be replaced by one render-pass + a data struct driving
+    // viewport, scissor, constant buffer values, and the ImGui display
     InternalDrawState                m_target_res_draw;
     InternalDrawState                m_half_res_draw;
     InternalDrawState*               m_current_internal_draw = nullptr;
-
-    // TODO: Map out descriptor sets + descriptor pool layout
 
     enum InternalResolution {
         Full = 0,
@@ -109,8 +132,12 @@ private:
         //       Render to Internal resolution and Target resolution
         //       Upscale/visualize to Target resolution
         //       Copy to swapchain
+        //       
+        //       Should be manageable via scissor/viewport?
     };
     InternalResolution               m_internal_res_selector = InternalResolution::Full;
+    // TODO: In the future, this will be a data struct, not just...the same as the selector
+    InternalResolution               m_internal_resolution = InternalResolution::Full;
 };
 
 #endif // __APP_CORE_H__
