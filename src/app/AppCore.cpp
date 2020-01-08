@@ -1,5 +1,5 @@
 /*
- Copyright 2019 Google Inc.
+ Copyright 2019-2020 Google Inc.
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -17,6 +17,130 @@
 #include "AppCore.h"
 
 #include "AssetUtil.h"
+
+// TODO: Maybe move resolution tables to another file? To be included directly?
+
+struct ResolutionInfo {
+    ResolutionInfoKey id;
+    VkExtent2D resolution_extent;
+    std::string text;
+};
+
+struct TargetResolutionChain {
+    TargetResolutionKey id;
+    ResolutionInfoKey resolution_info_key;
+    std::vector<ResolutionInfoKey> internal_resolution_info_keys;
+};
+
+struct PresentResolutionChain {
+    PresentResolutionKey id;
+    ResolutionInfoKey resolution_info_key;
+    std::vector<TargetResolutionKey> target_resolution_keys;
+};
+
+static ResolutionInfo s_resolution_infos[ResolutionInfoKey::krCount] = {
+    {
+        ResolutionInfoKey::kr540p, {960, 540}, "960 x 540"
+    },
+    {
+        ResolutionInfoKey::kr720p, {1280, 720}, "1280 x 720"
+    },
+    {
+        ResolutionInfoKey::kr1080p, {1920, 1080}, "1920 x 1080"
+    },
+    {
+        ResolutionInfoKey::kr1440p, {2560, 1440}, "2560 x 1440"
+    },
+    {
+        ResolutionInfoKey::kr2160p, {3840, 2160}, "3840 x 2160"
+    },
+};
+
+static TargetResolutionChain s_target_resolutions[TargetResolutionKey::ktCount] = {
+    {
+        TargetResolutionKey::kt1080p, ResolutionInfoKey::kr1080p, {ResolutionInfoKey::kr1080p, ResolutionInfoKey::kr720p, ResolutionInfoKey::kr540p}
+    },
+    {
+        TargetResolutionKey::kt2160p, ResolutionInfoKey::kr2160p, {ResolutionInfoKey::kr2160p, ResolutionInfoKey::kr1440p, ResolutionInfoKey::kr1080p}
+    },
+};
+
+static PresentResolutionChain s_present_resolutions[PresentResolutionKey::kpCount] = {
+    {
+        PresentResolutionKey::kp1080p, ResolutionInfoKey::kr1080p, {TargetResolutionKey::kt1080p},
+    },
+    {
+        PresentResolutionKey::kp2160p, ResolutionInfoKey::kr2160p, {TargetResolutionKey::kt2160p, TargetResolutionKey::kt1080p},
+    },
+};
+
+PresentResolutionKey VkexInfoApp::FindPresentResolutionKey(const uint32_t width)
+{
+    PresentResolutionKey detected_present_key = PresentResolutionKey::kpCount;
+
+    for (auto& present_chain : s_present_resolutions) {
+        auto res_info_key = present_chain.resolution_info_key;
+        if (width == s_resolution_infos[res_info_key].resolution_extent.width) {
+            detected_present_key = present_chain.id;
+            break;
+        }
+    }
+
+    VKEX_ASSERT(detected_present_key != PresentResolutionKey::kpCount);
+
+    return detected_present_key;
+}
+
+void VkexInfoApp::SetPresentResolution(PresentResolutionKey new_present_resolution)
+{
+    m_present_resolution_key = new_present_resolution;
+
+    m_selected_target_resolution_index = 0;
+    m_target_resolution_key = s_present_resolutions[m_present_resolution_key].target_resolution_keys[m_selected_target_resolution_index];
+
+    m_selected_internal_resolution_index = 0;
+    m_internal_resolution_key = s_target_resolutions[m_target_resolution_key].internal_resolution_info_keys[m_selected_internal_resolution_index];
+}
+
+VkExtent2D VkexInfoApp::GetTargetResolutionExtent()
+{
+    auto res_info_key = s_target_resolutions[m_target_resolution_key].resolution_info_key;
+    return s_resolution_infos[res_info_key].resolution_extent;
+}
+
+VkExtent2D VkexInfoApp::GetInternalResolutionExtent()
+{
+    return s_resolution_infos[m_internal_resolution_key].resolution_extent;
+}
+
+const char * VkexInfoApp::GetTargetResolutionText()
+{
+    auto res_info_key = s_target_resolutions[m_target_resolution_key].resolution_info_key;
+    return s_resolution_infos[res_info_key].text.c_str();
+}
+
+const char * VkexInfoApp::GetPresentResolutionText()
+{
+    auto res_info_key = s_present_resolutions[m_present_resolution_key].resolution_info_key;
+    return s_resolution_infos[res_info_key].text.c_str();
+}
+
+void VkexInfoApp::BuildInternalResolutionTextList(std::vector<const char*>& internal_text_list)
+{
+    for (auto internal_resolution : s_target_resolutions[m_target_resolution_key].internal_resolution_info_keys) {
+        auto& res_info = s_resolution_infos[internal_resolution];
+        internal_text_list.push_back(res_info.text.c_str());
+    }
+}
+
+void VkexInfoApp::BuildTargetResolutionTextList(std::vector<const char*>& target_text_list)
+{
+    for (auto target_resolution : s_present_resolutions[m_present_resolution_key].target_resolution_keys) {
+        auto res_info_key = s_target_resolutions[target_resolution].resolution_info_key;
+        auto& res_info = s_resolution_infos[res_info_key];
+        target_text_list.push_back(res_info.text.c_str());
+    }
+}
 
 void VkexInfoApp::SetupShaders(const std::vector<ShaderProgramInputs>& shader_inputs, 
                                      std::vector<GeneratedShaderState>& generated_shader_states)
@@ -217,20 +341,25 @@ void VkexInfoApp::DrawAppInfoGUI()
             //          Delta visualizers...
             ImGui::Columns(2);
             {
+                std::vector<const char*> resolution_items;
+                BuildInternalResolutionTextList(resolution_items);
+
                 ImGui::Text("Internal resolution");
                 ImGui::NextColumn();
-                const char* items[] = { "Native", "Half", };
-                ImGui::Combo("", (int*)(&m_internal_res_selector), items, IM_ARRAYSIZE(items));
+                ImGui::Combo("", (int*)(&m_selected_internal_resolution_index), resolution_items.data(), int(resolution_items.size()));
                 ImGui::NextColumn();
             }
             {
-                // TODO: This info will come from another data struct, that will also be used to update constant buffer values
-                // and scissor/viewport
-                auto target_res_extent = m_current_internal_draw->simple_render_pass.rtv_texture->GetImage()->GetExtent();
-
+                // TODO: Make target resolution selectable
                 ImGui::Text("Target Resolution");
                 ImGui::NextColumn();
-                ImGui::Text("%d x %d", target_res_extent.width, target_res_extent.height);
+                ImGui::Text(GetTargetResolutionText());
+                ImGui::NextColumn();
+            }
+            {
+                ImGui::Text("Present Resolution");
+                ImGui::NextColumn();
+                ImGui::Text(GetPresentResolutionText());
                 ImGui::NextColumn();
             }
             ImGui::Columns(1);

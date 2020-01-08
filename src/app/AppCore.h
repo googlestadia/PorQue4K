@@ -1,5 +1,5 @@
 /*
- Copyright 2019 Google Inc.
+ Copyright 2019-2020 Google Inc.
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -75,6 +75,29 @@ struct GeneratedShaderState {
     std::vector<vkex::DescriptorSet> descriptor_sets;
 };
 
+// TODO: Rename these enums into something more sane...
+
+enum ResolutionInfoKey {
+    kr540p = 0,
+    kr720p = 1,
+    kr1080p = 2,
+    kr1440p = 3,
+    kr2160p = 4,
+    krCount,
+};
+
+enum TargetResolutionKey {
+    kt1080p = 0,
+    kt2160p = 1,
+    ktCount,
+};
+
+enum PresentResolutionKey {
+    kp1080p = 0,
+    kp2160p = 1,
+    kpCount,
+};
+
 class VkexInfoApp
     : public vkex::Application
 {
@@ -89,6 +112,17 @@ public:
     void Present(vkex::Application::PresentData* p_data);
 
 protected:
+    PresentResolutionKey FindPresentResolutionKey(const uint32_t width);
+    void SetPresentResolution(PresentResolutionKey new_present_resolution);
+    VkExtent2D GetTargetResolutionExtent();
+    VkExtent2D GetInternalResolutionExtent();
+
+    const char * GetTargetResolutionText();
+    const char * GetPresentResolutionText();
+
+    void BuildInternalResolutionTextList(std::vector<const char*>& internal_text_list);
+    void BuildTargetResolutionTextList(std::vector<const char*>& target_text_list);
+
     void DrawAppInfoGUI();
 
     void SetupShaders(const std::vector<ShaderProgramInputs>& shader_inputs,
@@ -107,37 +141,23 @@ private:
     ScaledTexCopyDimsConstants  m_scaled_tex_copy_dims_constants = {};
     std::vector<vkex::Buffer>   m_scaled_tex_copy_constant_buffers;
 
-    struct InternalDrawState {
-        // TODO: Port this a single render-pass, and update the viewport/scissor
-        // per frame, along with constant buffer params!
-        SimpleRenderPass            simple_render_pass = {};
-    };
+    SimpleRenderPass            m_draw_simple_render_pass = {};
 
-    // TODO: This will be replaced by one render-pass + a data struct driving
-    // viewport, scissor, constant buffer values, and the ImGui display
-    InternalDrawState                m_target_res_draw;
-    InternalDrawState                m_half_res_draw;
-    InternalDrawState*               m_current_internal_draw = nullptr;
+    // TODO: Handle dynamic resolution?
+    // TODO: Build out Internal -> Target -> Swapchain render paths
+    //       Render to Internal resolution and Target resolution
+    //       Upscale/visualize to Target resolution
+    //       Copy to swapchain
 
-    enum InternalResolution {
-        Full = 0,
-        Half = 1,
-        // TODO: Dynamic?
-        // TODO: If our target resolutions are 1080p and 4K, we could
-        //       just have three internal resolutions per target resolution
-        //       1080p: 540p, 720p, 1080p
-        //       4K: 1080p, 1440p, 2160p
-        //       This also would extend to other target resolutions.
-        //       Our chain would be Internal -> Target -> Swapchain
-        //       Render to Internal resolution and Target resolution
-        //       Upscale/visualize to Target resolution
-        //       Copy to swapchain
-        //       
-        //       Should be manageable via scissor/viewport?
-    };
-    InternalResolution               m_internal_res_selector = InternalResolution::Full;
-    // TODO: In the future, this will be a data struct, not just...the same as the selector
-    InternalResolution               m_internal_resolution = InternalResolution::Full;
+    PresentResolutionKey             m_present_resolution_key;
+    TargetResolutionKey              m_target_resolution_key;
+    ResolutionInfoKey                m_internal_resolution_key;
+    uint32_t                         m_selected_internal_resolution_index;
+    uint32_t                         m_selected_target_resolution_index;
+
+    uint32_t                         m_internal_width = UINT32_MAX;
+    uint32_t                         m_internal_height = UINT32_MAX;
+    VkRect2D                         m_internal_render_area = {};
 };
 
 #endif // __APP_CORE_H__
