@@ -16,8 +16,6 @@
 
 #include "AppCore.h"
 
-#include "AssetUtil.h"
-
 // TODO: Maybe move resolution tables to another file? To be included directly?
 
 struct ResolutionInfo {
@@ -102,15 +100,38 @@ void VkexInfoApp::SetPresentResolution(PresentResolutionKey new_present_resoluti
     m_internal_resolution_key = s_target_resolutions[m_target_resolution_key].internal_resolution_info_keys[m_selected_internal_resolution_index];
 }
 
+void VkexInfoApp::UpdateTargetResolution()
+{
+    auto old_key = m_target_resolution_key;
+
+    m_target_resolution_key = s_present_resolutions[m_present_resolution_key].target_resolution_keys[m_selected_target_resolution_index];
+
+    if (old_key != m_target_resolution_key) {
+        m_selected_internal_resolution_index = 0;
+        UpdateInternalResolution();
+    }
+}
+
+void VkexInfoApp::UpdateInternalResolution()
+{
+    m_internal_resolution_key = s_target_resolutions[m_target_resolution_key].internal_resolution_info_keys[m_selected_internal_resolution_index];
+}
+
+VkExtent2D VkexInfoApp::GetInternalResolutionExtent()
+{
+    return s_resolution_infos[m_internal_resolution_key].resolution_extent;
+}
+
 VkExtent2D VkexInfoApp::GetTargetResolutionExtent()
 {
     auto res_info_key = s_target_resolutions[m_target_resolution_key].resolution_info_key;
     return s_resolution_infos[res_info_key].resolution_extent;
 }
 
-VkExtent2D VkexInfoApp::GetInternalResolutionExtent()
+VkExtent2D VkexInfoApp::GetPresentResolutionExtent()
 {
-    return s_resolution_infos[m_internal_resolution_key].resolution_extent;
+    auto res_info_key = s_present_resolutions[m_present_resolution_key].resolution_info_key;
+    return s_resolution_infos[res_info_key].resolution_extent;
 }
 
 const char * VkexInfoApp::GetTargetResolutionText()
@@ -139,90 +160,6 @@ void VkexInfoApp::BuildTargetResolutionTextList(std::vector<const char*>& target
         auto res_info_key = s_target_resolutions[target_resolution].resolution_info_key;
         auto& res_info = s_resolution_infos[res_info_key];
         target_text_list.push_back(res_info.text.c_str());
-    }
-}
-
-void VkexInfoApp::SetupShaders(const std::vector<ShaderProgramInputs>& shader_inputs, 
-                                     std::vector<GeneratedShaderState>& generated_shader_states)
-{
-    generated_shader_states.reserve(shader_inputs.size());
-
-    vkex::DescriptorPoolCreateInfo descriptor_pool_create_info = {};
-
-    for (auto& shader_input : shader_inputs) {
-        GeneratedShaderState gen_shader_state = {};
-
-        {
-            gen_shader_state.pipeline_type = shader_input.pipeline_type;
-            
-            // TODO: Check shader path length?
-            if (gen_shader_state.pipeline_type == ShaderPipelineType::Compute) {
-                VKEX_CALL(asset_util::CreateShaderProgramCompute(
-                    GetDevice(),
-                    shader_input.shader_paths[0],
-                    &gen_shader_state.program));
-            } else {
-                VKEX_CALL(asset_util::CreateShaderProgram(
-                    GetDevice(),
-                    shader_input.shader_paths[0],
-                    shader_input.shader_paths[1],
-                    &gen_shader_state.program));
-            }
-        }
-
-        {
-            const vkex::ShaderInterface& shader_interface = gen_shader_state.program->GetInterface();
-            vkex::DescriptorSetLayoutCreateInfo create_info = ToVkexCreateInfo(shader_interface.GetSet(0));
-            VKEX_CALL(GetDevice()->CreateDescriptorSetLayout(create_info, &gen_shader_state.descriptor_set_layout));
-
-            descriptor_pool_create_info.pool_sizes += shader_interface.GetDescriptorPoolSizes();
-        }
-
-        {
-            vkex::PipelineLayoutCreateInfo create_info = {};
-            create_info.descriptor_set_layouts.push_back(vkex::ToVulkan(gen_shader_state.descriptor_set_layout));
-            vkex::Result vkex_result = vkex::Result::Undefined;
-            VKEX_CALL(GetDevice()->CreatePipelineLayout(create_info, &gen_shader_state.pipeline_layout));
-        }
-
-        {
-            if (gen_shader_state.pipeline_type == ShaderPipelineType::Compute) {
-                vkex::ComputePipelineCreateInfo create_info = {};
-                create_info.shader_program = gen_shader_state.program;
-                create_info.pipeline_layout = gen_shader_state.pipeline_layout;
-
-                vkex::Result vkex_result = vkex::Result::Undefined;
-                VKEX_CALL(GetDevice()->CreateComputePipeline(create_info, &gen_shader_state.compute_pipeline));
-            } else {
-                vkex::GraphicsPipelineCreateInfo gfx_create_info = shader_input.graphics_pipeline_create_info;
-                gfx_create_info.shader_program = gen_shader_state.program;
-                gfx_create_info.pipeline_layout = gen_shader_state.pipeline_layout;
-
-                vkex::Result vkex_result = vkex::Result::Undefined;
-                VKEX_CALL(GetDevice()->CreateGraphicsPipeline(gfx_create_info, &gen_shader_state.graphics_pipeline));
-            }
-        }
-
-        generated_shader_states.push_back(gen_shader_state);
-    }
-
-    const uint32_t frame_count = GetConfiguration().frame_count;
-
-    {
-        // TODO: DescriptorPoolCreateInfo does have a size_multiplier, but it isn't used yet...
-        descriptor_pool_create_info.pool_sizes *= frame_count;
-        VKEX_CALL(GetDevice()->CreateDescriptorPool(descriptor_pool_create_info, &m_shared_descriptor_pool));
-    }
-
-    for (auto& gen_shader_state : generated_shader_states) {
-        vkex::DescriptorSetAllocateInfo allocate_info = {};
-        allocate_info.layouts.push_back(gen_shader_state.descriptor_set_layout);
-
-        gen_shader_state.descriptor_sets.resize(frame_count);
-        for (uint32_t frame_index = 0; frame_index < frame_count; frame_index++) {
-            VKEX_CALL(m_shared_descriptor_pool->AllocateDescriptorSets(allocate_info,
-                &gen_shader_state.descriptor_sets[frame_index]));
-        }
     }
 }
 
@@ -351,6 +288,7 @@ void VkexInfoApp::DrawAppInfoGUI()
             }
             {
                 // TODO: Make target resolution selectable
+                //       Should not do this until dispatch sizes are fixed up
                 ImGui::Text("Target Resolution");
                 ImGui::NextColumn();
                 ImGui::Text(GetTargetResolutionText());

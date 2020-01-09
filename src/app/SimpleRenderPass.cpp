@@ -4,6 +4,7 @@
 
 vkex::Result CreateSimpleRenderPass(
     vkex::Device      device,
+    vkex::Queue       queue,
     uint32_t          width,
     uint32_t          height,
     VkFormat          color_format,
@@ -109,6 +110,22 @@ vkex::Result CreateSimpleRenderPass(
         if (!result) {
             return result;
         }
+    }
+
+    {
+        vkex::Result vkex_result = vkex::Result::Undefined;
+        VKEX_CALL(vkex::TransitionImageLayout(queue,
+            simple_pass.rtv_texture,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT));
+
+        vkex_result = vkex::Result::Undefined;
+        VKEX_CALL(vkex::TransitionImageLayout(queue,
+            simple_pass.dsv_texture,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)));
     }
 
     *p_simple_pass = simple_pass;

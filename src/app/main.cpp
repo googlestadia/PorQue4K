@@ -63,25 +63,17 @@ void VkexInfoApp::Setup()
     const vkex::VertexBufferData* p_vertex_buffer_data = cube.GetVertexBufferByIndex(0);
 
     // Geometry draw renderpasses at different resolutions
-    {
-        // TODO: Maybe this should just get the Present resolution extent? I guess this is always
-        // the same...
-        auto target_res = GetTargetResolutionExtent();
+    // All images are allocated with the Present resolution extent,
+    // and then use scissor/viewport to render to sub-resolution
+    // TODO: Which will not work with checkerboard...
 
-        vkex::Result vkex_result = vkex::Result::Undefined;
-        VKEX_CALL(CreateSimpleRenderPass(GetDevice(),
-            target_res.width, target_res.height,
-            GetConfiguration().swapchain.color_format,
-            VK_FORMAT_D32_SFLOAT,
-            &m_draw_simple_render_pass));
-    }
+    SetupImagesAndRenderPasses(GetPresentResolutionExtent(), GetConfiguration().swapchain.color_format, VK_FORMAT_D32_SFLOAT);
 
     // Build pipelines + related state
     {
         // TODO: Move this shader/pipeline generation into another file where it's
         // simple + isolated to add in new shaders and related info
 
-        // TODO: Descriptor set multipliers needed for multiple usage of pipelines!
         std::vector<ShaderProgramInputs> shader_inputs(AppShaderList::NumTypes);
 
         {
@@ -98,16 +90,24 @@ void VkexInfoApp::Setup()
             create_info.samples = VK_SAMPLE_COUNT_1_BIT;
             create_info.depth_test_enable = true;
             create_info.depth_write_enable = true;
-            create_info.rtv_formats = { m_draw_simple_render_pass.rtv->GetFormat() };
-            create_info.dsv_format = m_draw_simple_render_pass.dsv->GetFormat();
-            create_info.render_pass = m_draw_simple_render_pass.render_pass;
+            create_info.rtv_formats = { m_internal_draw_simple_render_pass.rtv->GetFormat() };
+            create_info.dsv_format = m_internal_draw_simple_render_pass.dsv->GetFormat();
+            create_info.render_pass = m_internal_draw_simple_render_pass.render_pass;
             shader_inputs[AppShaderList::Geometry].graphics_pipeline_create_info = create_info;
         }
         {
-            shader_inputs[AppShaderList::ScaledTexCopy].pipeline_type = ShaderPipelineType::Compute;
+            shader_inputs[AppShaderList::InternalToTargetScaledCopy].pipeline_type = ShaderPipelineType::Compute;
 
-            shader_inputs[AppShaderList::ScaledTexCopy].shader_paths.resize(1);
-            shader_inputs[AppShaderList::ScaledTexCopy].shader_paths[0] = GetAssetPath("shaders/copy_texture.cs.spv");
+            shader_inputs[AppShaderList::InternalToTargetScaledCopy].shader_paths.resize(1);
+            shader_inputs[AppShaderList::InternalToTargetScaledCopy].shader_paths[0] = GetAssetPath("shaders/copy_texture.cs.spv");
+        }
+        {
+            // TODO: Right now, we'll re-use the previous shader, but this probably has to change to a graphics blit because of
+            // swapchain + compute usage issues
+            shader_inputs[AppShaderList::TargetToPresentScaledCopy].pipeline_type = ShaderPipelineType::Compute;
+
+            shader_inputs[AppShaderList::TargetToPresentScaledCopy].shader_paths.resize(1);
+            shader_inputs[AppShaderList::TargetToPresentScaledCopy].shader_paths[0] = GetAssetPath("shaders/copy_texture.cs.spv");
         }
 
         SetupShaders(shader_inputs, m_generated_shader_states);
@@ -143,13 +143,25 @@ void VkexInfoApp::Setup()
         }
     }
 
-    // Scaled tex copy constants + descriptor updates
+    // Scaled copy constant buffer creation + fixed descriptor updates
     {
-        m_scaled_tex_copy_constant_buffers.resize(GetConfiguration().frame_count);
+        m_internal_to_target_scaled_copy_constant_buffers.resize(GetConfiguration().frame_count);
 
-        for (auto& cb : m_scaled_tex_copy_constant_buffers) {
+        for (auto& cb : m_internal_to_target_scaled_copy_constant_buffers) {
             VKEX_CALL(asset_util::CreateConstantBuffer(
-                m_scaled_tex_copy_dims_constants.size,
+                m_internal_to_target_scaled_copy_constants.size,
+                nullptr,
+                GetGraphicsQueue(),
+                asset_util::MEMORY_USAGE_CPU_TO_GPU,
+                &cb));
+        }
+    }
+    {
+        m_target_to_present_scaled_copy_constant_buffers.resize(GetConfiguration().frame_count);
+
+        for (auto& cb : m_target_to_present_scaled_copy_constant_buffers) {
+            VKEX_CALL(asset_util::CreateConstantBuffer(
+                m_target_to_present_scaled_copy_constants.size,
                 nullptr,
                 GetGraphicsQueue(),
                 asset_util::MEMORY_USAGE_CPU_TO_GPU,
@@ -158,77 +170,47 @@ void VkexInfoApp::Setup()
     }
 
     {
-        auto internal_res_extent = GetInternalResolutionExtent();
-
-        m_internal_width = internal_res_extent.width;
-        m_internal_height = internal_res_extent.height;
-
-        // TODO: Drive these from the internal renderpass? Or fixed options?
-        m_internal_render_area = m_draw_simple_render_pass.render_pass->GetFullRenderArea();
-        m_internal_render_area.extent.width = m_internal_width;
-        m_internal_render_area.extent.height = m_internal_height;
-
-        m_scaled_tex_copy_dims_constants.data.srcWidth = m_internal_width;
-        m_scaled_tex_copy_dims_constants.data.srcHeight = m_internal_height;
-
-        // TODO: Target res for now...
-        auto target_res_extent = GetTargetResolutionExtent();
-        m_scaled_tex_copy_dims_constants.data.dstWidth = target_res_extent.width;
-        m_scaled_tex_copy_dims_constants.data.dstHeight = target_res_extent.height;
-    }
-
-    // TODO: Set up a copy from present target to swapchain
-
-    {
         // TODO: It would be nice to have this grab the binding via the name instead of magically knowing
         // the binding here :p (TBH, all of that could be done offline as well, but whatever)
 
         auto frame_count = GetConfiguration().frame_count;
         for (uint32_t frame_index = 0; frame_index < frame_count; frame_index++) {
-            m_generated_shader_states[AppShaderList::ScaledTexCopy].descriptor_sets[frame_index]->UpdateDescriptor(0, m_scaled_tex_copy_constant_buffers[frame_index]);
-            m_generated_shader_states[AppShaderList::ScaledTexCopy].descriptor_sets[frame_index]->UpdateDescriptor(1, m_draw_simple_render_pass.rtv_texture);
+            m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(0, m_internal_to_target_scaled_copy_constant_buffers[frame_index]);
+            m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(1, m_internal_draw_simple_render_pass.rtv_texture);
+            m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(2, m_target_texture);
+
+            m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(0, m_target_to_present_scaled_copy_constant_buffers[frame_index]);
+            m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(1, m_target_texture);
         }
-    }
-
-    // TODO: Create separate internal + target images
-
-    // Image transitions
-    // TODO: When we create textures, can we specify an initial layout?
-    // Like...do we really need to see this code here?
-    {
-        vkex::Result vkex_result = vkex::Result::Undefined;
-        VKEX_CALL(vkex::TransitionImageLayout(GetGraphicsQueue(), 
-            m_draw_simple_render_pass.rtv_texture,
-            VK_IMAGE_LAYOUT_UNDEFINED, 
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT));
-
-        vkex_result = vkex::Result::Undefined;
-        VKEX_CALL(vkex::TransitionImageLayout(GetGraphicsQueue(),
-            m_draw_simple_render_pass.dsv_texture,
-            VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)));
     }
 }
 
 void VkexInfoApp::Update(double frame_elapsed_time)
 {
+    UpdateTargetResolution();
+    UpdateInternalResolution();
+
     auto internal_res_extent = GetInternalResolutionExtent();
     auto target_res_extent = GetTargetResolutionExtent();
+    auto present_res_extent = GetPresentResolutionExtent();
 
-    m_internal_width = internal_res_extent.width;
-    m_internal_height = internal_res_extent.height;
+    m_internal_render_area.offset.x = 0;
+    m_internal_render_area.offset.x = 0;
+    m_internal_render_area.extent = internal_res_extent;
 
-    m_internal_render_area.extent.width = m_internal_width;
-    m_internal_render_area.extent.height = m_internal_height;
+    m_target_render_area.offset.x = 0;
+    m_target_render_area.offset.x = 0;
+    m_target_render_area.extent= target_res_extent;
 
-    m_scaled_tex_copy_dims_constants.data.srcWidth = m_internal_width;
-    m_scaled_tex_copy_dims_constants.data.srcHeight = m_internal_height;
-    m_scaled_tex_copy_dims_constants.data.dstWidth = target_res_extent.width;
-    m_scaled_tex_copy_dims_constants.data.dstHeight = target_res_extent.height;
+    m_internal_to_target_scaled_copy_constants.data.srcWidth = internal_res_extent.width;
+    m_internal_to_target_scaled_copy_constants.data.srcHeight = internal_res_extent.height;
+    m_internal_to_target_scaled_copy_constants.data.dstWidth = target_res_extent.width;
+    m_internal_to_target_scaled_copy_constants.data.dstHeight = target_res_extent.height;
 
-    // TODO: Update target + swapchain constants
+    m_target_to_present_scaled_copy_constants.data.srcWidth = target_res_extent.width;
+    m_target_to_present_scaled_copy_constants.data.srcHeight = target_res_extent.height;
+    m_target_to_present_scaled_copy_constants.data.dstWidth = present_res_extent.width;
+    m_target_to_present_scaled_copy_constants.data.dstHeight = present_res_extent.height;
 
     float3 eye = float3(0, 0, 2);
     float3 center = float3(0, 0, 0);
@@ -249,11 +231,18 @@ void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
     const auto frame_index = p_data->GetFrameIndex();
     VKEX_CALL(m_simple_draw_constant_buffers[frame_index]->Copy(m_simple_draw_view_transform_constants.size, &m_simple_draw_view_transform_constants.data));
 
+    {
+        auto& scaled_tex_copy_cb = m_internal_to_target_scaled_copy_constant_buffers[frame_index];
+        VKEX_CALL(scaled_tex_copy_cb->Copy(
+            m_internal_to_target_scaled_copy_constants.size,
+            &m_internal_to_target_scaled_copy_constants.data));
+    }
+
     auto cmd = p_data->GetCommandBuffer();
 
     // TODO: Render to internal resolution and target resolutions
     // in order to have delta visualization
-    auto render_pass = m_draw_simple_render_pass.render_pass;
+    auto render_pass = m_internal_draw_simple_render_pass.render_pass;
 
     VkClearValue rtv_clear = {};
     VkClearValue dsv_clear = {};
@@ -274,8 +263,34 @@ void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
 
     cmd->CmdEndRenderPass();
 
-    // TODO: Perform upscale or visualization to 'final' target here
-    // Final target will then be copied to swapchain in Present
+    // TODO: If needed, perform the 'target-res' internal pass here, 
+    // along with needed transitions.
+    // Might have to bounce out into methods that handle all transitions, pipeline,
+    // and descriptors for either internal or visualization
+    // Maybe dispatch to a method? 
+
+    cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
+    cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].compute_pipeline);
+    cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE,
+        *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].pipeline_layout),
+        0,
+        { *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]) });
+
+    // TODO: Select between visualizations or draws
+
+    // TODO: Automate (image size / thread group size)
+    // TODO: Cannot toggle target resolution until I fix this!!
+    vkex::uint3 dispatchDims = { 120, 68, 1 };
+    cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
+
+    cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
     cmd->End();
 
@@ -298,11 +313,10 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
     const auto frame_index = p_data->GetFrameIndex();
 
     {
-        auto& scaled_tex_copy_cb = m_scaled_tex_copy_constant_buffers[frame_index];
+        auto& scaled_tex_copy_cb = m_target_to_present_scaled_copy_constant_buffers[frame_index];
         VKEX_CALL(scaled_tex_copy_cb->Copy(
-            m_scaled_tex_copy_dims_constants.size,
-            &m_scaled_tex_copy_dims_constants.data));
-        // Each per-frame descriptor set already points to the correct per-frame constant buffer
+            m_target_to_present_scaled_copy_constants.size,
+            &m_target_to_present_scaled_copy_constants.data));
     }
 
     {
@@ -311,7 +325,7 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
         info.imageView = *(present_render_pass->GetRtvs()[0]->GetResource());
         info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
-        m_generated_shader_states[AppShaderList::ScaledTexCopy].descriptor_sets[frame_index]->UpdateDescriptors(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 0, 1, &info);
+        m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]->UpdateDescriptors(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 0, 1, &info);
 
         // TODO: Add UpdateDescriptor helper for ImageViews?
     }
@@ -319,8 +333,8 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
     cmd->Begin();
 
     {
-        cmd->CmdTransitionImageLayout(m_draw_simple_render_pass.rtv_texture,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        cmd->CmdTransitionImageLayout(m_target_texture,
+            VK_IMAGE_LAYOUT_GENERAL,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
@@ -332,27 +346,20 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
             VK_IMAGE_LAYOUT_GENERAL,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-        cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::ScaledTexCopy].compute_pipeline);
-        cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE, 
-            *(m_generated_shader_states[AppShaderList::ScaledTexCopy].pipeline_layout),
-            0, 
-            { *(m_generated_shader_states[AppShaderList::ScaledTexCopy].descriptor_sets[frame_index]) });
+        cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].compute_pipeline);
+        cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE,
+            *(m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].pipeline_layout),
+            0,
+            { *(m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]) });
         
-        // TODO: Select between visualizations or draws
-        // TODO: Perhaps we should do the upscale or visualization to another internal
-        //       full-res texture, and then do the copy from that to the swapchain.
-        //       The reason being that the descriptor set complexity is greatly
-        //       simplified if we don't have to worry about the swapchain images
-        //       for all dispatches.
-
         // TODO: Automate (image size / thread group size)
         vkex::uint3 dispatchDims = { 120, 68, 1 };
         cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
 
-        cmd->CmdTransitionImageLayout(m_draw_simple_render_pass.rtv_texture,
+        cmd->CmdTransitionImageLayout(m_target_texture,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+            VK_IMAGE_LAYOUT_GENERAL,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
         cmd->CmdTransitionImageLayout(swapchain_image->GetVkObject(),
             swapchain_image->GetAspectFlags(),

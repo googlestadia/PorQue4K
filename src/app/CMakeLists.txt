@@ -31,6 +31,7 @@ list(APPEND HDR_FILES
 list(APPEND SRC_FILES
     ${SRC_DIR}/main.cpp
     ${SRC_DIR}/AppCore.cpp
+    ${SRC_DIR}/AppSetup.cpp
     ${SRC_DIR}/AssetUtil.cpp
     ${SRC_DIR}/SimpleRenderPass.cpp
 )

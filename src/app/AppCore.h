@@ -53,7 +53,8 @@ enum ShaderPipelineType {
 
 enum AppShaderList {
     Geometry = 0,
-    ScaledTexCopy = 1,
+    InternalToTargetScaledCopy = 1,
+    TargetToPresentScaledCopy = 2,
     NumTypes,
 };
 
@@ -62,6 +63,9 @@ struct ShaderProgramInputs {
     std::vector<vkex::fs::path> shader_paths;
     vkex::GraphicsPipelineCreateInfo graphics_pipeline_create_info;
 };
+
+// TODO: There's a chance we might have to tease apart the allocated
+// descriptors from the shader, but...probably not
 
 struct GeneratedShaderState {
     ShaderPipelineType          pipeline_type;
@@ -112,10 +116,14 @@ public:
     void Present(vkex::Application::PresentData* p_data);
 
 protected:
+    // AppCore.cpp
     PresentResolutionKey FindPresentResolutionKey(const uint32_t width);
+    void UpdateInternalResolution();
+    void UpdateTargetResolution();
     void SetPresentResolution(PresentResolutionKey new_present_resolution);
-    VkExtent2D GetTargetResolutionExtent();
     VkExtent2D GetInternalResolutionExtent();
+    VkExtent2D GetTargetResolutionExtent();
+    VkExtent2D GetPresentResolutionExtent();
 
     const char * GetTargetResolutionText();
     const char * GetPresentResolutionText();
@@ -125,6 +133,10 @@ protected:
 
     void DrawAppInfoGUI();
 
+    // AppSetup.cpp
+    void SetupImagesAndRenderPasses(const VkExtent2D present_extent, 
+                                    const VkFormat color_format, 
+                                    const VkFormat depth_format);
     void SetupShaders(const std::vector<ShaderProgramInputs>& shader_inputs,
                             std::vector<GeneratedShaderState>& generated_shader_states);
 
@@ -138,26 +150,26 @@ private:
     ViewTransformConstants      m_simple_draw_view_transform_constants = {};
     std::vector<vkex::Buffer>   m_simple_draw_constant_buffers;
 
-    ScaledTexCopyDimsConstants  m_scaled_tex_copy_dims_constants = {};
-    std::vector<vkex::Buffer>   m_scaled_tex_copy_constant_buffers;
+    ScaledTexCopyDimsConstants  m_internal_to_target_scaled_copy_constants = {};
+    std::vector<vkex::Buffer>   m_internal_to_target_scaled_copy_constant_buffers;
 
-    SimpleRenderPass            m_draw_simple_render_pass = {};
+    ScaledTexCopyDimsConstants  m_target_to_present_scaled_copy_constants = {};
+    std::vector<vkex::Buffer>   m_target_to_present_scaled_copy_constant_buffers;
+
+    SimpleRenderPass            m_internal_draw_simple_render_pass = {};
+    SimpleRenderPass            m_internal_as_target_draw_simple_render_pass = {};
+    vkex::Texture               m_target_texture = nullptr;
 
     // TODO: Handle dynamic resolution?
-    // TODO: Build out Internal -> Target -> Swapchain render paths
-    //       Render to Internal resolution and Target resolution
-    //       Upscale/visualize to Target resolution
-    //       Copy to swapchain
 
-    PresentResolutionKey             m_present_resolution_key;
-    TargetResolutionKey              m_target_resolution_key;
-    ResolutionInfoKey                m_internal_resolution_key;
-    uint32_t                         m_selected_internal_resolution_index;
-    uint32_t                         m_selected_target_resolution_index;
+    PresentResolutionKey             m_present_resolution_key = PresentResolutionKey::kpCount;
+    TargetResolutionKey              m_target_resolution_key = TargetResolutionKey::ktCount;
+    ResolutionInfoKey                m_internal_resolution_key = ResolutionInfoKey::krCount;
+    uint32_t                         m_selected_internal_resolution_index = UINT32_MAX;
+    uint32_t                         m_selected_target_resolution_index = UINT32_MAX;
 
-    uint32_t                         m_internal_width = UINT32_MAX;
-    uint32_t                         m_internal_height = UINT32_MAX;
     VkRect2D                         m_internal_render_area = {};
+    VkRect2D                         m_target_render_area = {};
 };
 
 #endif // __APP_CORE_H__

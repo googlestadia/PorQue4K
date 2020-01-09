@@ -20,6 +20,7 @@ struct SimpleRenderPass {
 
 vkex::Result CreateSimpleRenderPass(
     vkex::Device      device,
+    vkex::Queue       queue,
     uint32_t          width,
     uint32_t          height,
     VkFormat          color_format,
