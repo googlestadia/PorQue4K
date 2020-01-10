@@ -748,6 +748,11 @@ public:
    */
   void AddBindings(const vkex::ShaderInterface& interface);
 
+  /**@n AddThreadgroupDimensions
+   *
+   */
+  void AddThreadgroupDimensions(const uint32_t x, uint32_t y, uint32_t z);
+
   /** @fn GetSetNumbers
    *
    */
@@ -768,6 +773,11 @@ public:
    */
   vkex::ShaderInterface::Set GetSet(uint32_t set_number) const;
 
+  /**@n GetThreadgroupDimensions
+ *
+ */
+  vkex::uint3 GetThreadgroupDimensions() const;
+
   /** @fn GetDescriptorType
    *
    */
@@ -779,6 +789,7 @@ private:
 
   VertexBindingDescription                m_vertex_bindings;
   std::vector<vkex::ShaderInterface::Set> m_descriptor_sets;
+  vkex::uint3                             m_threadgroup_dimensions;
 };
 
 // =================================================================================================

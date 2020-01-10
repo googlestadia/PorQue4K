@@ -176,6 +176,13 @@ void ShaderInterface::AddBindings(const vkex::ShaderInterface& interface)
   }
 }
 
+void ShaderInterface::AddThreadgroupDimensions(const uint32_t x, uint32_t y, uint32_t z)
+{
+    m_threadgroup_dimensions.x = x;
+    m_threadgroup_dimensions.y = y;
+    m_threadgroup_dimensions.z = z;
+}
+
 vkex::DescriptorPoolSizes ShaderInterface::GetDescriptorPoolSizes() const
 {
   vkex::DescriptorPoolSizes sizes = {};
@@ -215,6 +222,11 @@ vkex::ShaderInterface::Set ShaderInterface::GetSet(uint32_t set_number) const
   }
 
   return set;
+}
+
+vkex::uint3 ShaderInterface::GetThreadgroupDimensions() const
+{
+    return m_threadgroup_dimensions;
 }
 
 VkDescriptorType ShaderInterface::GetDescriptorType(uint32_t set_number, uint32_t binding_number) const

@@ -282,9 +282,9 @@ void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
 
     // TODO: Select between visualizations or draws
 
-    // TODO: Automate (image size / thread group size)
-    // TODO: Cannot toggle target resolution until I fix this!!
-    vkex::uint3 dispatchDims = { 120, 68, 1 };
+    vkex::uint3 dispatchDims = CalculateSimpleDispatchDimensions(
+        m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy],
+        GetTargetResolutionExtent());
     cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
 
     cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
@@ -352,8 +352,9 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
             0,
             { *(m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]) });
         
-        // TODO: Automate (image size / thread group size)
-        vkex::uint3 dispatchDims = { 120, 68, 1 };
+        vkex::uint3 dispatchDims = CalculateSimpleDispatchDimensions(
+            m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy],
+            GetPresentResolutionExtent());
         cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
 
         cmd->CmdTransitionImageLayout(m_target_texture,
@@ -381,7 +382,7 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
         cmd->CmdSetViewport(swapchain_render_pass->GetFullRenderArea());
         cmd->CmdSetScissor(swapchain_render_pass->GetFullRenderArea());
         
-        // TODO: Make sure this size is multiplied for current target resolution
+        // TODO: Make sure this size is multiplied for current present resolution
         // TODO: Figure out how to change FontSize?
 
         ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiCond_Once);

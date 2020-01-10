@@ -163,6 +163,18 @@ void VkexInfoApp::BuildTargetResolutionTextList(std::vector<const char*>& target
     }
 }
 
+vkex::uint3 VkexInfoApp::CalculateSimpleDispatchDimensions(GeneratedShaderState& gen_shader_state, VkExtent2D dest_image_extent)
+{
+    auto tg_dims = gen_shader_state.program->GetInterface().GetThreadgroupDimensions();
+
+    vkex::uint3 dispatch_dims = { 0, 0, 1 };
+
+    dispatch_dims.x = uint32_t(ceil((float(dest_image_extent.width) / tg_dims.x)));
+    dispatch_dims.y = uint32_t(ceil((float(dest_image_extent.height) / tg_dims.y)));
+
+    return dispatch_dims;
+}
+
 void VkexInfoApp::DrawAppInfoGUI()
 {
     if (!m_configuration.enable_imgui) {
@@ -287,11 +299,16 @@ void VkexInfoApp::DrawAppInfoGUI()
                 ImGui::NextColumn();
             }
             {
-                // TODO: Make target resolution selectable
-                //       Should not do this until dispatch sizes are fixed up
+                std::vector<const char*> resolution_items;
+                BuildTargetResolutionTextList(resolution_items);
+
                 ImGui::Text("Target Resolution");
                 ImGui::NextColumn();
-                ImGui::Text(GetTargetResolutionText());
+                if (resolution_items.size() == 1) {
+                    ImGui::Text(GetTargetResolutionText());
+                } else {
+                    ImGui::Combo("", (int*)(&m_selected_target_resolution_index), resolution_items.data(), int(resolution_items.size()));
+                }
                 ImGui::NextColumn();
             }
             {

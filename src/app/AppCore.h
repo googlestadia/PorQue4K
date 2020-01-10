@@ -131,6 +131,10 @@ protected:
     void BuildInternalResolutionTextList(std::vector<const char*>& internal_text_list);
     void BuildTargetResolutionTextList(std::vector<const char*>& target_text_list);
 
+    // TODO: This is very informal because the TG size doesn't necessarily 
+    // mean it represents 1 output pixel per thread
+    vkex::uint3 CalculateSimpleDispatchDimensions(GeneratedShaderState& gen_shader_state, VkExtent2D dest_image_extent);
+
     void DrawAppInfoGUI();
 
     // AppSetup.cpp

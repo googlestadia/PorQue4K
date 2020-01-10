@@ -82,6 +82,13 @@ vkex::Result CShaderModule::InternalCreate(
     if (m_create_info.source_file.empty() && (reflection.GetSourceFile() != nullptr)) {
       m_create_info.source_file = reflection.GetSourceFile();
     }
+
+    if ((m_create_info.stage & VK_SHADER_STAGE_COMPUTE_BIT) != 0)
+    {
+      // HACK: No formal getter yet?
+      auto dispatch_local_size = reflection.GetShaderModule().entry_points[0].local_size;
+      m_interface.AddThreadgroupDimensions(dispatch_local_size.x, dispatch_local_size.y, dispatch_local_size.z);
+    }
   
     // Descriptor set create infos
     {
@@ -172,6 +179,11 @@ vkex::Result CShaderProgram::InternalCreate(
 
     auto& module_shader_interface = module->GetInterface();
     m_interface.AddBindings(module_shader_interface);
+
+    if ((module->GetStage() & VK_SHADER_STAGE_COMPUTE_BIT) != 0) {
+        auto tg_dims = module_shader_interface.GetThreadgroupDimensions();
+        m_interface.AddThreadgroupDimensions(tg_dims.x, tg_dims.y, tg_dims.z);
+    }
   }
 
   return vkex::Result::Success;
