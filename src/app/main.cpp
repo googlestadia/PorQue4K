@@ -109,6 +109,12 @@ void VkexInfoApp::Setup()
             shader_inputs[AppShaderList::TargetToPresentScaledCopy].shader_paths.resize(1);
             shader_inputs[AppShaderList::TargetToPresentScaledCopy].shader_paths[0] = GetAssetPath("shaders/copy_texture.cs.spv");
         }
+        {
+            shader_inputs[AppShaderList::InternalTargetImageDelta].pipeline_type = ShaderPipelineType::Compute;
+
+            shader_inputs[AppShaderList::InternalTargetImageDelta].shader_paths.resize(1);
+            shader_inputs[AppShaderList::InternalTargetImageDelta].shader_paths[0] = GetAssetPath("shaders/image_delta.cs.spv");
+        }
 
         SetupShaders(shader_inputs, m_generated_shader_states);
     }
@@ -143,7 +149,7 @@ void VkexInfoApp::Setup()
         }
     }
 
-    // Scaled copy constant buffer creation + fixed descriptor updates
+    // Compute copy/viz constant buffer creation + fixed descriptor updates
     {
         m_internal_to_target_scaled_copy_constant_buffers.resize(GetConfiguration().frame_count);
 
@@ -168,6 +174,18 @@ void VkexInfoApp::Setup()
                 &cb));
         }
     }
+    {
+        m_image_delta_options_constant_buffers.resize(GetConfiguration().frame_count);
+
+        for (auto& cb : m_image_delta_options_constant_buffers) {
+            VKEX_CALL(asset_util::CreateConstantBuffer(
+                m_image_delta_options_constants.size,
+                nullptr,
+                GetGraphicsQueue(),
+                asset_util::MEMORY_USAGE_CPU_TO_GPU,
+                &cb));
+        }
+    }
 
     {
         // TODO: It would be nice to have this grab the binding via the name instead of magically knowing
@@ -181,12 +199,32 @@ void VkexInfoApp::Setup()
 
             m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(0, m_target_to_present_scaled_copy_constant_buffers[frame_index]);
             m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(1, m_target_texture);
+
+            // TODO: I can re-use constant buffers, but should probably rename for clarity
+            m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(0, m_internal_to_target_scaled_copy_constant_buffers[frame_index]);
+            m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(1, m_image_delta_options_constant_buffers[frame_index]);
+            m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(2, m_internal_draw_simple_render_pass.rtv_texture);
+            m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(3, m_internal_as_target_draw_simple_render_pass.rtv_texture);
+            m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(4, m_target_texture);
         }
     }
 }
 
 void VkexInfoApp::Update(double frame_elapsed_time)
 {
+    float3 eye = float3(0, 0, 2);
+    float3 center = float3(0, 0, 0);
+    float3 up = float3(0, 1, 0);
+    float aspect = GetWindowAspect();
+    vkex::PerspCamera camera(eye, center, up, 60.0f, aspect);
+
+    float t = GetFrameStartTime();
+    float4x4 M = glm::translate(float3(0, 0, 0)) * glm::rotate(t / 2.0f, float3(0, 1, 0)) * glm::rotate(t / 4.0f, float3(1, 0, 0));
+    float4x4 V = camera.GetViewMatrix();
+    float4x4 P = camera.GetProjectionMatrix();
+
+    m_simple_draw_view_transform_constants.data.ModelViewProjectionMatrix = P * V*M;
+
     UpdateTargetResolution();
     UpdateInternalResolution();
 
@@ -212,18 +250,12 @@ void VkexInfoApp::Update(double frame_elapsed_time)
     m_target_to_present_scaled_copy_constants.data.dstWidth = present_res_extent.width;
     m_target_to_present_scaled_copy_constants.data.dstHeight = present_res_extent.height;
 
-    float3 eye = float3(0, 0, 2);
-    float3 center = float3(0, 0, 0);
-    float3 up = float3(0, 1, 0);
-    float aspect = GetWindowAspect();
-    vkex::PerspCamera camera(eye, center, up, 60.0f, aspect);
-
-    float t = GetFrameStartTime();
-    float4x4 M = glm::translate(float3(0, 0, 0)) * glm::rotate(t / 2.0f, float3(0, 1, 0)) * glm::rotate(t / 4.0f, float3(1, 0, 0));
-    float4x4 V = camera.GetViewMatrix();
-    float4x4 P = camera.GetProjectionMatrix();
-
-    m_simple_draw_view_transform_constants.data.ModelViewProjectionMatrix = P * V*M;
+    // TODO: This option population code is so stupid
+    if (m_delta_visualizer_mode == DeltaVisualizerMode::kLuminance) {
+        m_image_delta_options_constants.data.vizMode = 0;
+    } else if (m_delta_visualizer_mode == DeltaVisualizerMode::kRGB) {
+        m_image_delta_options_constants.data.vizMode = 1;
+    }
 }
 
 void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
@@ -231,17 +263,10 @@ void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
     const auto frame_index = p_data->GetFrameIndex();
     VKEX_CALL(m_simple_draw_constant_buffers[frame_index]->Copy(m_simple_draw_view_transform_constants.size, &m_simple_draw_view_transform_constants.data));
 
-    {
-        auto& scaled_tex_copy_cb = m_internal_to_target_scaled_copy_constant_buffers[frame_index];
-        VKEX_CALL(scaled_tex_copy_cb->Copy(
-            m_internal_to_target_scaled_copy_constants.size,
-            &m_internal_to_target_scaled_copy_constants.data));
-    }
-
+    // Draw scene at internal resolution
     auto cmd = p_data->GetCommandBuffer();
+    cmd->Begin();
 
-    // TODO: Render to internal resolution and target resolutions
-    // in order to have delta visualization
     auto render_pass = m_internal_draw_simple_render_pass.render_pass;
 
     VkClearValue rtv_clear = {};
@@ -249,7 +274,6 @@ void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
     dsv_clear.depthStencil.depth = 1.0f;
     dsv_clear.depthStencil.stencil = 0xFF;
     std::vector<VkClearValue> clear_values = { rtv_clear, dsv_clear };
-    cmd->Begin();
     cmd->CmdBeginRenderPass(render_pass, &clear_values);
     cmd->CmdSetViewport(m_internal_render_area);
     cmd->CmdSetScissor(m_internal_render_area);
@@ -263,34 +287,8 @@ void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
 
     cmd->CmdEndRenderPass();
 
-    // TODO: If needed, perform the 'target-res' internal pass here, 
-    // along with needed transitions.
-    // Might have to bounce out into methods that handle all transitions, pipeline,
-    // and descriptors for either internal or visualization
-    // Maybe dispatch to a method? 
-
-    cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-
-    cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].compute_pipeline);
-    cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE,
-        *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].pipeline_layout),
-        0,
-        { *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]) });
-
-    // TODO: Select between visualizations or draws
-
-    vkex::uint3 dispatchDims = CalculateSimpleDispatchDimensions(
-        m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy],
-        GetTargetResolutionExtent());
-    cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
-
-    cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+    // Internal -> Target
+    ProcessInternalToTarget(cmd, frame_index);
 
     cmd->End();
 

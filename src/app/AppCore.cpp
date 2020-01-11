@@ -295,7 +295,7 @@ void VkexInfoApp::DrawAppInfoGUI()
 
                 ImGui::Text("Internal resolution");
                 ImGui::NextColumn();
-                ImGui::Combo("", (int*)(&m_selected_internal_resolution_index), resolution_items.data(), int(resolution_items.size()));
+                ImGui::Combo("##InternalRes", (int*)(&m_selected_internal_resolution_index), resolution_items.data(), int(resolution_items.size()));
                 ImGui::NextColumn();
             }
             {
@@ -304,17 +304,21 @@ void VkexInfoApp::DrawAppInfoGUI()
 
                 ImGui::Text("Target Resolution");
                 ImGui::NextColumn();
-                if (resolution_items.size() == 1) {
-                    ImGui::Text(GetTargetResolutionText());
-                } else {
-                    ImGui::Combo("", (int*)(&m_selected_target_resolution_index), resolution_items.data(), int(resolution_items.size()));
-                }
+                ImGui::Combo("##TargetRes", (int*)(&m_selected_target_resolution_index), resolution_items.data(), int(resolution_items.size()));
                 ImGui::NextColumn();
             }
             {
                 ImGui::Text("Present Resolution");
                 ImGui::NextColumn();
                 ImGui::Text(GetPresentResolutionText());
+                ImGui::NextColumn();
+            }
+            {
+                std::vector<const char*> visualizer_items = {"Off", "Luma delta", "RGB delta"};
+                VKEX_ASSERT(int(visualizer_items.size()) == int(DeltaVisualizerMode::kDeltaVizCount));
+                ImGui::Text("Delta Visualizer");
+                ImGui::NextColumn();
+                ImGui::Combo("##DeltaViz", (int*)(&m_delta_visualizer_mode), visualizer_items.data(), int(visualizer_items.size()));
                 ImGui::NextColumn();
             }
             ImGui::Columns(1);

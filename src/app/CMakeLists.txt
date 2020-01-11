@@ -31,6 +31,7 @@ list(APPEND HDR_FILES
 list(APPEND SRC_FILES
     ${SRC_DIR}/main.cpp
     ${SRC_DIR}/AppCore.cpp
+    ${SRC_DIR}/AppRender.cpp
     ${SRC_DIR}/AppSetup.cpp
     ${SRC_DIR}/AssetUtil.cpp
     ${SRC_DIR}/SimpleRenderPass.cpp
@@ -42,6 +43,7 @@ list(APPEND VSPS_SHADER_FILES
 
 list(APPEND CS_SHADER_FILES
   ${SHADERS_DIR}/copy_texture.hlsl
+  ${SHADERS_DIR}/image_delta.hlsl
 )
 
 source_group ("Shaders\\VsPs" FILES

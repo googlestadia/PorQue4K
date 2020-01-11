@@ -1,0 +1,119 @@
+/*
+ Copyright 2020 Google Inc.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+ http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+*/
+
+#include "AppCore.h"
+
+void VkexInfoApp::ProcessInternalToTarget(vkex::CommandBuffer cmd, uint32_t frame_index)
+{
+    {
+        auto& scaled_tex_copy_cb = m_internal_to_target_scaled_copy_constant_buffers[frame_index];
+        VKEX_CALL(scaled_tex_copy_cb->Copy(
+            m_internal_to_target_scaled_copy_constants.size,
+            &m_internal_to_target_scaled_copy_constants.data));
+    }
+
+    if (m_delta_visualizer_mode == DeltaVisualizerMode::kDisabled) {
+        UpscaleInternalToTarget(cmd, frame_index);
+    } else {
+        VisualizeInternalTargetDelta(cmd, frame_index);
+    }
+}
+
+void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t frame_index)
+{
+    cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
+    cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].compute_pipeline);
+    cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE,
+        *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].pipeline_layout),
+        0,
+        { *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]) });
+
+    vkex::uint3 dispatchDims = CalculateSimpleDispatchDimensions(
+        m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy],
+        GetTargetResolutionExtent());
+    cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
+
+    cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+}
+
+void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t frame_index)
+{
+    {
+        auto& image_delta_options_cb = m_image_delta_options_constant_buffers[frame_index];
+        VKEX_CALL(image_delta_options_cb->Copy(
+            m_image_delta_options_constants.size,
+            &m_image_delta_options_constants.data));
+    }
+
+    // Target resolution draw
+    {
+        auto render_pass = m_internal_as_target_draw_simple_render_pass.render_pass;
+
+        VkClearValue rtv_clear = {};
+        VkClearValue dsv_clear = {};
+        dsv_clear.depthStencil.depth = 1.0f;
+        dsv_clear.depthStencil.stencil = 0xFF;
+        std::vector<VkClearValue> clear_values = { rtv_clear, dsv_clear };
+        cmd->CmdBeginRenderPass(render_pass, &clear_values);
+        cmd->CmdSetViewport(m_target_render_area);
+        cmd->CmdSetScissor(m_target_render_area);
+        cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::Geometry].graphics_pipeline);
+        cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS,
+            *(m_generated_shader_states[AppShaderList::Geometry].pipeline_layout),
+            0,
+            { *(m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]) });
+        cmd->CmdBindVertexBuffers(m_simple_draw_vertex_buffer);
+        cmd->CmdDraw(36, 1, 0, 0);
+
+        cmd->CmdEndRenderPass();
+    }
+
+    cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    cmd->CmdTransitionImageLayout(m_internal_as_target_draw_simple_render_pass.rtv_texture,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
+    cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::InternalTargetImageDelta].compute_pipeline);
+    cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE,
+        *(m_generated_shader_states[AppShaderList::InternalTargetImageDelta].pipeline_layout),
+        0,
+        { *(m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]) });
+
+    vkex::uint3 dispatchDims = CalculateSimpleDispatchDimensions(
+        m_generated_shader_states[AppShaderList::InternalTargetImageDelta],
+        GetTargetResolutionExtent());
+    cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
+
+    cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+    cmd->CmdTransitionImageLayout(m_internal_as_target_draw_simple_render_pass.rtv_texture,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+}

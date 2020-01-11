@@ -45,6 +45,10 @@ struct ScaledTexCopyDimensionsData {
 
 using ScaledTexCopyDimsConstants = vkex::ConstantBufferData<ScaledTexCopyDimensionsData>;
 
+struct ImageDeltaOptions {
+    uint vizMode;
+};
+using ImageDeltaOptionsConstants = vkex::ConstantBufferData<ImageDeltaOptions>;
 
 enum ShaderPipelineType {
     Graphics = 0,
@@ -55,6 +59,7 @@ enum AppShaderList {
     Geometry = 0,
     InternalToTargetScaledCopy = 1,
     TargetToPresentScaledCopy = 2,
+    InternalTargetImageDelta = 3,
     NumTypes,
 };
 
@@ -102,6 +107,13 @@ enum PresentResolutionKey {
     kpCount,
 };
 
+enum DeltaVisualizerMode {
+    kDisabled = 0,
+    kLuminance = 1,
+    kRGB = 2,
+    kDeltaVizCount,
+};
+
 class VkexInfoApp
     : public vkex::Application
 {
@@ -109,6 +121,7 @@ public:
     VkexInfoApp() : vkex::Application(1920, 1080, "PorQue4K") {}
     virtual ~VkexInfoApp() {}
 
+    // main.cpp
     void Configure(const vkex::ArgParser& args, vkex::Configuration& configuration);
     void Setup();
     void Update(double frame_elapsed_time);
@@ -137,6 +150,11 @@ protected:
 
     void DrawAppInfoGUI();
 
+    // AppRender.cpp
+    void ProcessInternalToTarget(vkex::CommandBuffer cmd, uint32_t frame_index);
+    void UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t frame_index);
+    void VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t frame_index);
+
     // AppSetup.cpp
     void SetupImagesAndRenderPasses(const VkExtent2D present_extent, 
                                     const VkFormat color_format, 
@@ -151,6 +169,9 @@ private:
     vkex::Buffer                m_simple_draw_vertex_buffer = nullptr;
 
     // TODO: Is there a struct we can use to manage the CPU/GPU copies of constant data?
+    // TODO: What we should do is to create one big Buffer for all constants (per-frame)
+    // and then allocate chunks out of it, instead of creating all of these stupid
+    // little buffers. The descriptors handle the offset into the buffer just fine.
     ViewTransformConstants      m_simple_draw_view_transform_constants = {};
     std::vector<vkex::Buffer>   m_simple_draw_constant_buffers;
 
@@ -159,6 +180,9 @@ private:
 
     ScaledTexCopyDimsConstants  m_target_to_present_scaled_copy_constants = {};
     std::vector<vkex::Buffer>   m_target_to_present_scaled_copy_constant_buffers;
+
+    ImageDeltaOptionsConstants  m_image_delta_options_constants = {};
+    std::vector<vkex::Buffer>   m_image_delta_options_constant_buffers;
 
     SimpleRenderPass            m_internal_draw_simple_render_pass = {};
     SimpleRenderPass            m_internal_as_target_draw_simple_render_pass = {};
@@ -174,6 +198,8 @@ private:
 
     VkRect2D                         m_internal_render_area = {};
     VkRect2D                         m_target_render_area = {};
+
+    DeltaVisualizerMode              m_delta_visualizer_mode = kDisabled;
 };
 
 #endif // __APP_CORE_H__
