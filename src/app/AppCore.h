@@ -130,7 +130,7 @@ public:
     void Present(vkex::Application::PresentData* p_data);
 
 protected:
-    // AppCore.cpp
+    // AppUtil.cpp
     PresentResolutionKey FindPresentResolutionKey(const uint32_t width);
     void UpdateInternalResolutionState();
     void UpdateTargetResolutionState();
