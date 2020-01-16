@@ -19,6 +19,7 @@
 
 #include "vkex/Application.h"
 
+#include "GLTFModel.h"
 #include "SimpleRenderPass.h"
 
 using float2 = vkex::float2;
@@ -131,8 +132,8 @@ public:
 protected:
     // AppCore.cpp
     PresentResolutionKey FindPresentResolutionKey(const uint32_t width);
-    void UpdateInternalResolution();
-    void UpdateTargetResolution();
+    void UpdateInternalResolutionState();
+    void UpdateTargetResolutionState();
     void SetPresentResolution(PresentResolutionKey new_present_resolution);
     VkExtent2D GetInternalResolutionExtent();
     VkExtent2D GetTargetResolutionExtent();
@@ -155,6 +156,8 @@ protected:
     void UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t frame_index);
     void VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t frame_index);
 
+    void DrawModel(vkex::CommandBuffer cmd);
+
     // AppSetup.cpp
     void SetupImagesAndRenderPasses(const VkExtent2D present_extent, 
                                     const VkFormat color_format, 
@@ -166,12 +169,11 @@ private:
     std::vector<GeneratedShaderState> m_generated_shader_states;
     vkex::DescriptorPool              m_shared_descriptor_pool = nullptr;
 
-    vkex::Buffer                m_simple_draw_vertex_buffer = nullptr;
-
     // TODO: Is there a struct we can use to manage the CPU/GPU copies of constant data?
     // TODO: What we should do is to create one big Buffer for all constants (per-frame)
     // and then allocate chunks out of it, instead of creating all of these stupid
-    // little buffers. The descriptors handle the offset into the buffer just fine.
+    // little buffers. VkDescriptorBufferInfo handles the offset into the buffer just fine.
+
     ViewTransformConstants      m_simple_draw_view_transform_constants = {};
     std::vector<vkex::Buffer>   m_simple_draw_constant_buffers;
 
@@ -200,6 +202,9 @@ private:
     VkRect2D                         m_target_render_area = {};
 
     DeltaVisualizerMode              m_delta_visualizer_mode = kDisabled;
+
+    // TODO: Eventually this becomes a list of models (somewhere) and a pointer for the active model
+    GLTFModel                        m_helmet_model;
 };
 
 #endif // __APP_CORE_H__

@@ -35,6 +35,11 @@ enum MemoryUsage {
 };
 
 std::vector<uint8_t> LoadFile(const vkex::fs::path& file_path);
+void DetermineMemoryFlags(
+    MemoryUsage memory_usage,
+    bool&       device_local,
+    bool&       host_visible
+);
 
 vkex::Result CreateShaderProgramCompute(
   vkex::Device          device,
@@ -52,6 +57,16 @@ vkex::Result CreateTexture(
   vkex::Queue     queue,
   MemoryUsage     memory_usage,
   vkex::Texture*  p_texture);
+
+vkex::Result CreateTexture(
+    size_t          src_data_size,
+    const uint8_t*  p_src_data,
+    int             width,
+    int             height,
+    VkFormat        format,
+    vkex::Queue     queue,
+    MemoryUsage     memory_usage,
+    vkex::Texture*  p_texture);
 
 vkex::Result CreateConstantBuffer(
   size_t        size,
@@ -73,6 +88,13 @@ vkex::Result CreateVertexBuffer(
   vkex::Queue   queue,
   MemoryUsage   memory_usage,
   vkex::Buffer* p_buffer);
+
+vkex::Result CreateGeometryBuffer(
+    size_t        size,
+    const void*   p_data,
+    vkex::Queue   queue,
+    MemoryUsage   memory_usage,
+    vkex::Buffer* p_buffer);
 
 vkex::Result CreateStorageBuffer(
   size_t        size,

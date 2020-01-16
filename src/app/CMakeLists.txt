@@ -21,10 +21,12 @@ project(4KApp)
 set(SRC_DIR      ${CMAKE_CURRENT_SOURCE_DIR})
 set(ASSETS_DIR   ${CMAKE_SOURCE_DIR}/assets)
 set(SHADERS_DIR  ${SRC_DIR}/shaders)
+set(TINYGLTF_INC_DIR	      ${CMAKE_SOURCE_DIR}/third_party/tinygltf)
 
 list(APPEND HDR_FILES
     ${SRC_DIR}/AppCore.h
     ${SRC_DIR}/AssetUtil.h
+    ${SRC_DIR}/GLTFModel.h
     ${SRC_DIR}/SimpleRenderPass.h
 )
 
@@ -34,10 +36,12 @@ list(APPEND SRC_FILES
     ${SRC_DIR}/AppRender.cpp
     ${SRC_DIR}/AppSetup.cpp
     ${SRC_DIR}/AssetUtil.cpp
+    ${SRC_DIR}/GLTFModel.cpp
     ${SRC_DIR}/SimpleRenderPass.cpp
 )
 
 list(APPEND VSPS_SHADER_FILES
+  ${SHADERS_DIR}/draw_helmet.hlsl
   ${SHADERS_DIR}/draw_vertex.hlsl
 )
 
@@ -70,7 +74,8 @@ add_executable(${PROJECT_NAME} ${HDR_FILES} ${SRC_FILES} ${VSPS_SHADER_FILES} ${
 
 target_include_directories(${PROJECT_NAME} 
   PRIVATE   ${SRC_DIR}
-  PUBLIC    ${VULKAN_INCLUDE_DIR}
+  PUBLIC    ${TINYGLTF_INC_DIR}
+            ${VULKAN_INCLUDE_DIR}
             ${VKEX_TOP_INC_DIR}
 )
 

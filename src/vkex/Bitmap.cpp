@@ -569,6 +569,32 @@ vkex::Result Bitmap::Create(
   return vkex::Result::Success;
 }
 
+vkex::Result Bitmap::Create(
+    size_t                         src_data_size,
+    const uint8_t*                 p_src_data,
+    int                            width,
+    int                            height,
+    VkFormat                       format,
+    uint32_t                       level_count,
+    std::unique_ptr<vkex::Bitmap>* p_bitmap)
+{
+  const int required_channels = 4;
+
+  uint32_t row_stride = static_cast<uint32_t>(width) * static_cast<uint32_t>(required_channels);
+  std::unique_ptr<vkex::Bitmap> bitmap = std::make_unique<vkex::Bitmap>(
+    static_cast<uint32_t>(width),
+    static_cast<uint32_t>(height),
+    format,
+    level_count,
+    p_src_data,
+    row_stride,
+    height);
+
+  *p_bitmap = std::move(bitmap);
+
+  return vkex::Result::Success;
+}
+
 vkex::Result Bitmap::GetDataFootprint(
   const fs::path& file_path,
   uint32_t        level_count,

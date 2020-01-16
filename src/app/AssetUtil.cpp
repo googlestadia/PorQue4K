@@ -259,6 +259,142 @@ vkex::Result CreateTexture(
   return vkex::Result::Success;
 }
 
+vkex::Result CreateTexture(
+    size_t          src_data_size,
+    const uint8_t*  p_src_data,
+    int             width,
+    int             height,
+    VkFormat        format,
+    vkex::Queue     queue,
+    MemoryUsage     memory_usage,
+    vkex::Texture*  p_texture)
+{
+  VKEX_ASSERT_MSG(queue, "Invalid queue object");
+  if (!queue) {
+    return vkex::Result::ErrorInvalidQueueObject;
+  }
+
+  VKEX_ASSERT_MSG(p_texture != nullptr, "Target texture object is null");
+  if (p_texture == nullptr) {
+    return vkex::Result::ErrorUnexpectedNullPointer;
+  }
+
+  vkex::Device device = queue->GetDevice();
+ 
+  // Load bitmap
+  std::unique_ptr<vkex::Bitmap> bitmap;  
+  {
+    vkex::Result result = vkex::Bitmap::Create(
+      src_data_size,
+      p_src_data,
+      width,
+      height,
+      format,
+      0,
+      &bitmap);
+    if (!result) {
+      return result;
+    }
+  }
+
+  // Create staging buffer and copy bitmap
+  vkex::Buffer cpu_buffer = nullptr;
+  {
+    uint64_t data_size = bitmap->GetDataSizeAllLevels();
+
+    vkex::BufferCreateInfo create_info        = {};
+    create_info.size                          = data_size;
+    create_info.usage_flags.bits.transfer_src = true;
+    create_info.committed                     = true;
+    DetermineMemoryFlags(MEMORY_USAGE_CPU_ONLY, create_info.device_local, create_info.host_visible);
+    vkex::Result result = device->CreateStorageBuffer(create_info, &cpu_buffer);
+    if (!result) {
+      return result;
+    }
+
+    // Copy bitmap to data
+    result = cpu_buffer->Copy(data_size, bitmap->GetData());
+    if (!result) {
+      return result;
+    }
+  }
+
+  // Create image
+  {
+    vkex::TextureCreateInfo create_info             = {};
+    create_info.image.image_type                    = VK_IMAGE_TYPE_2D;
+    create_info.image.format                        = bitmap->GetFormat();
+    create_info.image.extent                        = bitmap->GetExtent();
+    create_info.image.mip_levels                    = bitmap->GetMipLevels();
+    create_info.image.tiling                        = VK_IMAGE_TILING_OPTIMAL;
+    create_info.image.usage_flags.bits.sampled      = true;
+    create_info.image.usage_flags.bits.transfer_dst = true;
+    create_info.image.initial_layout                = VK_IMAGE_LAYOUT_UNDEFINED;
+    create_info.image.committed                     = true;
+    create_info.view.derive_from_image              = true;
+    DetermineMemoryFlags(memory_usage, create_info.image.device_local, create_info.image.host_visible);
+    vkex::Result result = device->CreateTexture(create_info, p_texture);
+    if (!result) {
+      return result;
+    }
+  }
+
+  vkex::Result result = vkex::TransitionImageLayout(
+    queue,
+    (*p_texture)->GetImage(),
+    VK_IMAGE_LAYOUT_UNDEFINED,
+    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      VK_PIPELINE_STAGE_TRANSFER_BIT);
+  if (!result) {
+    return result;
+  }
+
+  std::vector<VkBufferImageCopy> regions;
+  for (uint32_t level = 0; level < bitmap->GetMipLevels(); ++level) {
+    vkex::Bitmap::Mip mip = {};
+    bitmap->GetMipLayout(level, &mip);
+    VkBufferImageCopy region               = {};
+    region.bufferOffset                    = mip.data_offset;
+    region.bufferRowLength                 = mip.width;
+    region.bufferImageHeight               = mip.height;
+    region.imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel       = level;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount     = 1;
+    region.imageOffset.x                   = 0;
+    region.imageOffset.y                   = 0;
+    region.imageOffset.z                   = 0;
+    region.imageExtent.width               = mip.width;
+    region.imageExtent.height              = mip.height;
+    region.imageExtent.depth               = 1;
+    regions.push_back(region);
+  }
+
+  vkex::CopyResource(
+    queue,
+    cpu_buffer,
+    (*p_texture)->GetImage(),
+    vkex::CountU32(regions),
+    vkex::DataPtr(regions));
+
+  result = vkex::TransitionImageLayout(
+    queue,
+    (*p_texture)->GetImage(),
+    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT); 
+  if (!result) {
+    return result;
+  }
+
+  result = device->DestroyStorageBuffer(cpu_buffer);
+  if (!result) {
+    return result;
+  }
+
+  return vkex::Result::Success;
+}
+
 static vkex::Result CreateBuffer(
   size_t                        size,
   const void*                   p_data,
@@ -420,6 +556,32 @@ vkex::Result CreateVertexBuffer(
     return result;
   }
   return vkex::Result::Success;
+}
+
+vkex::Result CreateGeometryBuffer(
+    size_t        size,
+    const void*   p_data,
+    vkex::Queue   queue,
+    MemoryUsage   memory_usage,
+    vkex::Buffer* p_buffer
+)
+{
+    vkex::BufferUsageFlags usage_flags = {};
+    usage_flags.bits.transfer_dst = true;
+    usage_flags.bits.vertex_buffer = true;
+    usage_flags.bits.index_buffer = true;
+
+    vkex::Result result = CreateBuffer(
+        size,
+        p_data,
+        queue,
+        usage_flags,
+        memory_usage,
+        p_buffer);
+    if (!result) {
+        return result;
+    }
+    return vkex::Result::Success;
 }
 
 vkex::Result CreateStorageBuffer(

@@ -20,7 +20,7 @@
 
 #include "AppCore.h"
 
-// TODO: Simplify shader management
+// TODO: Simplify shader<->app interface management
 // * Move constant buffer structs to another file?
 //   * Possibly share structs with shaders?
 // * Shared header for stuff like TG dims
@@ -56,17 +56,20 @@ void VkexInfoApp::Configure(const vkex::ArgParser& args, vkex::Configuration& co
 
 void VkexInfoApp::Setup()
 {
-    // Geometry data
-    vkex::PlatonicSolid::Options cube_options = {};
-    cube_options.vertex_colors = true;
-    vkex::PlatonicSolid cube = vkex::PlatonicSolid::Cube(cube_options);
-    const vkex::VertexBufferData* p_vertex_buffer_data = cube.GetVertexBufferByIndex(0);
+    {
+        auto helmet_path = GetAssetPath("models/DamagedHelmet/glTF/DamagedHelmet.gltf");
 
-    // Geometry draw renderpasses at different resolutions
-    // All images are allocated with the Present resolution extent,
-    // and then use scissor/viewport to render to sub-resolution
-    // TODO: Which will not work with checkerboard...
+        tinygltf::Model model;
+        tinygltf::TinyGLTF loader;
+        std::string err;
+        std::string warn;
 
+        bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, helmet_path.str());
+
+        m_helmet_model.PopulateFromModel(model, GetGraphicsQueue());
+    }
+
+    // TODO: How we manage images will change with checkerboard...
     SetupImagesAndRenderPasses(GetPresentResolutionExtent(), GetConfiguration().swapchain.color_format, VK_FORMAT_D32_SFLOAT);
 
     // Build pipelines + related state
@@ -80,13 +83,20 @@ void VkexInfoApp::Setup()
             shader_inputs[AppShaderList::Geometry].pipeline_type = ShaderPipelineType::Graphics;
 
             shader_inputs[AppShaderList::Geometry].shader_paths.resize(2);
-            shader_inputs[AppShaderList::Geometry].shader_paths[0] = GetAssetPath("shaders/draw_vertex.vs.spv");
-            shader_inputs[AppShaderList::Geometry].shader_paths[1] = GetAssetPath("shaders/draw_vertex.ps.spv");
+            shader_inputs[AppShaderList::Geometry].shader_paths[0] = GetAssetPath("shaders/draw_helmet.vs.spv");
+            shader_inputs[AppShaderList::Geometry].shader_paths[1] = GetAssetPath("shaders/draw_helmet.ps.spv");
 
-            vkex::VertexBindingDescription vertex_binding_descriptions = p_vertex_buffer_data->GetVertexBindingDescription();
+
+            std::vector<vkex::VertexBindingDescription> vertex_buffer_bindings = m_helmet_model.GetVertexBindingDescriptions(0, 0);
+            std::vector<VkFormat> vertex_buffer_formats = m_helmet_model.GetVertexBufferFormats(0, 0);
+
+            // TODO: We could have shared constants/defines for the locations?
+            vertex_buffer_bindings[GLTFModel::BufferType::Position].AddAttribute(0, vertex_buffer_formats[GLTFModel::BufferType::Position]);
+            vertex_buffer_bindings[GLTFModel::BufferType::Normal].AddAttribute(1, vertex_buffer_formats[GLTFModel::BufferType::Normal]);
+            vertex_buffer_bindings[GLTFModel::BufferType::TexCoord0].AddAttribute(2, vertex_buffer_formats[GLTFModel::BufferType::TexCoord0]);
 
             vkex::GraphicsPipelineCreateInfo create_info = {};
-            create_info.vertex_binding_descriptions = { vertex_binding_descriptions };
+            create_info.vertex_binding_descriptions = vertex_buffer_bindings;
             create_info.samples = VK_SAMPLE_COUNT_1_BIT;
             create_info.depth_test_enable = true;
             create_info.depth_write_enable = true;
@@ -119,15 +129,13 @@ void VkexInfoApp::Setup()
         SetupShaders(shader_inputs, m_generated_shader_states);
     }
 
-    // Draw constants + vertex buffers
-    {
-        VKEX_CALL(asset_util::CreateVertexBuffer(
-            p_vertex_buffer_data->GetDataSize(),
-            p_vertex_buffer_data->GetData(),
-            GetGraphicsQueue(),
-            asset_util::MEMORY_USAGE_GPU_ONLY,
-            &m_simple_draw_vertex_buffer));
-    }
+
+    // TODO: I think we'll want to re-work how constant buffers and constant buffer descriptors
+    // are managed through frames. I think I'd prefer to allocate one BAR0 buffer per-frame,
+    // allocate chunks out of it, copy from CPU, and use dynamic offsets to manage the
+    // descriptor set updates
+
+    // Draw constants
     {
 
         m_simple_draw_constant_buffers.resize(GetConfiguration().frame_count);
@@ -141,15 +149,7 @@ void VkexInfoApp::Setup()
         }
     }
 
-    // Update draw descriptors
-    {
-        auto frame_count = GetConfiguration().frame_count;
-        for (uint32_t frame_index = 0; frame_index < frame_count; frame_index++) {
-            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(0, m_simple_draw_constant_buffers[frame_index]);
-        }
-    }
-
-    // Compute copy/viz constant buffer creation + fixed descriptor updates
+    // Compute copy/viz constant buffer creation
     {
         m_internal_to_target_scaled_copy_constant_buffers.resize(GetConfiguration().frame_count);
 
@@ -187,6 +187,25 @@ void VkexInfoApp::Setup()
         }
     }
 
+    // Scene rendering descriptors
+    {
+        // TODO: There will probably only be one sampler to bind...
+
+        auto& helmet_samplers = m_helmet_model.GetMaterialSamplers(0, 0);
+        auto& helmet_textures = m_helmet_model.GetMaterialTextures(0, 0);
+        auto matComponent = GLTFModel::MaterialComponentType::BaseColor;
+
+        auto frame_count = GetConfiguration().frame_count;
+        for (uint32_t frame_index = 0; frame_index < frame_count; frame_index++) {
+            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(0, m_simple_draw_constant_buffers[frame_index]);
+
+            // TODO: If models are switching, these updates will have to be per-frame
+            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(1, helmet_samplers[matComponent]);
+            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(2, helmet_textures[matComponent]);
+        }
+    }
+
+    // Upscale + visualization descriptors
     {
         // TODO: It would be nice to have this grab the binding via the name instead of magically knowing
         // the binding here :p (TBH, all of that could be done offline as well, but whatever)
@@ -225,8 +244,8 @@ void VkexInfoApp::Update(double frame_elapsed_time)
 
     m_simple_draw_view_transform_constants.data.ModelViewProjectionMatrix = P * V*M;
 
-    UpdateTargetResolution();
-    UpdateInternalResolution();
+    UpdateTargetResolutionState();
+    UpdateInternalResolutionState();
 
     auto internal_res_extent = GetInternalResolutionExtent();
     auto target_res_extent = GetTargetResolutionExtent();
@@ -275,15 +294,17 @@ void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
     dsv_clear.depthStencil.stencil = 0xFF;
     std::vector<VkClearValue> clear_values = { rtv_clear, dsv_clear };
     cmd->CmdBeginRenderPass(render_pass, &clear_values);
+
     cmd->CmdSetViewport(m_internal_render_area);
     cmd->CmdSetScissor(m_internal_render_area);
+
     cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::Geometry].graphics_pipeline);
     cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, 
                                *(m_generated_shader_states[AppShaderList::Geometry].pipeline_layout),
                                0, 
                                { *(m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]) });
-    cmd->CmdBindVertexBuffers(m_simple_draw_vertex_buffer);
-    cmd->CmdDraw(36, 1, 0, 0);
+
+    DrawModel(cmd);
 
     cmd->CmdEndRenderPass();
 

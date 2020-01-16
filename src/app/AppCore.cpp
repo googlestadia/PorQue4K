@@ -100,7 +100,7 @@ void VkexInfoApp::SetPresentResolution(PresentResolutionKey new_present_resoluti
     m_internal_resolution_key = s_target_resolutions[m_target_resolution_key].internal_resolution_info_keys[m_selected_internal_resolution_index];
 }
 
-void VkexInfoApp::UpdateTargetResolution()
+void VkexInfoApp::UpdateTargetResolutionState()
 {
     auto old_key = m_target_resolution_key;
 
@@ -108,11 +108,11 @@ void VkexInfoApp::UpdateTargetResolution()
 
     if (old_key != m_target_resolution_key) {
         m_selected_internal_resolution_index = 0;
-        UpdateInternalResolution();
+        UpdateInternalResolutionState();
     }
 }
 
-void VkexInfoApp::UpdateInternalResolution()
+void VkexInfoApp::UpdateInternalResolutionState()
 {
     m_internal_resolution_key = s_target_resolutions[m_target_resolution_key].internal_resolution_info_keys[m_selected_internal_resolution_index];
 }
@@ -333,6 +333,8 @@ void VkexInfoApp::DrawAppInfoGUI()
             // TODO: Total upscaled pass time
             // TODO: Upscale pass time
         }
+
+        // TODO: Model picker?
     }
     ImGui::End();
 }

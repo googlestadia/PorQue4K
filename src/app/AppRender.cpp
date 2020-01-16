@@ -82,8 +82,8 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t
             *(m_generated_shader_states[AppShaderList::Geometry].pipeline_layout),
             0,
             { *(m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]) });
-        cmd->CmdBindVertexBuffers(m_simple_draw_vertex_buffer);
-        cmd->CmdDraw(36, 1, 0, 0);
+
+        DrawModel(cmd);
 
         cmd->CmdEndRenderPass();
     }
@@ -116,4 +116,27 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+}
+
+void VkexInfoApp::DrawModel(vkex::CommandBuffer cmd)
+{
+    // TODO: In the future, we'll want to formally loop over multiple nodes/meshes/prims
+    // TODO: Once we toggle models, we'll need to bind pre-generated descriptor
+    //       sets, or build the constant buffers/descriptors live
+
+    uint32_t node_index = 0;
+    uint32_t primitive_index = 0;
+
+    auto index_buffer = m_helmet_model.GetIndexBuffer(node_index, primitive_index);
+    auto index_type = m_helmet_model.GetIndexType(node_index, primitive_index);
+
+    cmd->CmdBindIndexBuffer(index_buffer, 0, index_type);
+
+    const VkDeviceSize offsets[] = { 0, 0, 0 };
+    std::vector<VkBuffer> vertex_buffers;
+    m_helmet_model.GetVertexBuffers(node_index, primitive_index, vertex_buffers);
+    cmd->CmdBindVertexBuffers(0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets);
+
+    auto index_count = m_helmet_model.GetIndexCount(node_index, primitive_index);
+    cmd->CmdDrawIndexed(index_count, 1, 0, 0, 0);
 }

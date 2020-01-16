@@ -9,9 +9,7 @@ VKEX_INC_DIR=$(realpath --relative-to=${SCRIPT_DIR} ${SRC_DIR}/..)
 
 echo ${VKEX_INC_DIR}
 
-HLSL_FILES=(draw_buffer_load_no_transform.hlsl draw_mtex_load_no_transform.hlsl draw_tex_load_no_transform.hlsl draw_tex_read_no_transform.hlsl\
- draw_mtex_read_no_transform.hlsl draw_deferred_no_transform.hlsl draw_deferred_no_transform.hlsl draw_deferred_no_transform.hlsl draw_red_no_transform.hlsl\
- draw_vertex_no_transform.hlsl draw_vertex.hlsl draw_texture.hlsl draw_alu_pbr_no_transform.hlsl)
+HLSL_FILES=(draw_vertex.hlsl draw_helmet.hlsl)
 for src_file in "${HLSL_FILES[@]}"
 do
   echo -e "\nCompiling ${src_file}"
@@ -27,7 +25,7 @@ do
   eval ${cmd} 
 done
 
-HLSL_COMPUTE_FILES=(fill_buffer.hlsl compute_launch_rate.hlsl)
+HLSL_COMPUTE_FILES=(copy_texture.hlsl image_delta.hlsl)
 for src_file in "${HLSL_COMPUTE_FILES[@]}"
 do
   echo -e "\nCompiling ${src_file}"

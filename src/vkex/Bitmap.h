@@ -112,6 +112,16 @@ public:
     uint64_t                       storage_size,
     uint8_t*                       p_storage);
 
+  // Create Bitmap from pre-loaded memory and format info
+  static vkex::Result Create(
+      size_t                         src_data_size,
+      const uint8_t*                 p_src_data,
+      int width,
+      int height,
+      VkFormat format,
+      uint32_t                       level_count,
+      std::unique_ptr<vkex::Bitmap>* p_bitmap);
+
   static vkex::Result GetDataFootprint(
     const fs::path& file_path,
     uint32_t        level_count,
