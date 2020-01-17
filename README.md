@@ -1,8 +1,8 @@
 # VulkanPorQue4K
 4K yee  
-We out here
+We out here, vibin'
 
-# Builds
+# Building
 
 ## Build Windows
 
@@ -17,7 +17,9 @@ Then build from generated Visual Studio solution `buildWinVS2017\VulkanPorQue4K.
 
 ## Build GGP
 
-Deploy assets to binary (from repo root folder):  
+### Deploy Assets
+
+Deploy assets to GGP instance (from repo root folder):  
 `deploy_assets.bat`|`deploy_assets.sh`
 ```
 > ggp ssh put -r ./assets
@@ -33,7 +35,7 @@ $ cmake -G Ninja .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$GGP_SDK_
 $ ninja
 ```
 
-Then 4KApp binary to gamelet
+Then deploy the 4KApp binary to gamelet
 ```
 > ggp ssh put ./buildGGP/src/app/4KApp
 > ggp run --cmd "4KApp"
@@ -57,3 +59,14 @@ getting the debugging working is still TBD (not deploying binary correctly yet).
 
 ## Build Linux
 TBD - Help!
+
+# Upscaling Techniques
+See the [Techniques Hub document](docs/TECHNIQUES.md).
+
+# Contributing
+[Contribution guidelines for this project](docs/CONTRIBUTING.md).
+
+# DirectXShaderCompiler Info
+This project uses [DXC](https://github.com/microsoft/DirectXShaderCompiler) to compile HLSL shaders to SPIR-V.
+
+Currently, the project has been verified against [9c89a1c2](https://github.com/microsoft/DirectXShaderCompiler/commit/9c89a1c2c6baa76dabc154f126408973848b0069).
