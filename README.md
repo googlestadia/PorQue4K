@@ -4,9 +4,13 @@ We out here, vibin'
 
 # Building
 
-## Build Windows
+Before doing anything, make sure your submodules are up-to-date!
+```
+$ git submodule update --init --recursive
+```
 
-`setup_windows.bat`
+## Build for Windows
+
 ```
 $ mkdir buildWinVS2017
 $ cd buildWinVS2017
@@ -15,7 +19,12 @@ $ cmake -G "Visual Studio 15 2017 Win64" -DDXC_PATH="C:\src\sc\dxc\d0e9147a\bin\
 
 Then build from generated Visual Studio solution `buildWinVS2017\VulkanPorQue4K.sln`
 
-## Build GGP
+You can use the included `setup_windows.bat` batch script to generate the Visual Studio 2017 solution + projects.
+```
+> setup_windows.bat <path to DXC binary>
+```
+
+## Build for GGP
 
 ### Deploy Assets
 
@@ -27,7 +36,6 @@ Deploy assets to GGP instance (from repo root folder):
 
 ### Build GGP + Ninja
 
-`setup_ggp_ninja.sh`
 ```
 $ mkdir buildGGP
 $ cd buildGGP
@@ -39,6 +47,11 @@ Then deploy the 4KApp binary to gamelet
 ```
 > ggp ssh put ./buildGGP/src/app/4KApp
 > ggp run --cmd "4KApp"
+```
+
+Alternatively, you can use `setup_ggp_ninja.sh` to build and deploy the binary to your instance!
+```
+$ sh setup_ggp_ninja.sh <path to DXC binary>
 ```
 
 ### Build GGP + Visual Studio
@@ -57,7 +70,7 @@ $ python3 ../ggpvs_conversion.py3 .
 Then open `buildGGPVS/VulkanPorQue4K.sln` with Visual Studio 2017. Building should work, though
 getting the debugging working is still TBD (not deploying binary correctly yet). 
 
-## Build Linux
+## Build for Linux
 TBD - Help!
 
 # Upscaling Techniques
