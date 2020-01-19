@@ -73,6 +73,18 @@ getting the debugging working is still TBD (not deploying binary correctly yet).
 ## Build for Linux
 TBD - Help!
 
+# Running the Sample
+
+## Windows / Linux
+Currently only runs windowed, and supports 1080p and 2160p (more in the future).
+```
+4KApp --height 2160
+```
+
+## GGP
+Swapchain resolution is detected during app initialization.
+The sample currently doesn't support swapchain resolution change, because who cares, that's not the point of the sample.
+
 # Upscaling Techniques
 See the [Techniques Hub document](docs/TECHNIQUES.md).
 
