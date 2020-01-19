@@ -934,17 +934,48 @@ vkex::Result Application::InitializeVkexSwapchain()
 
   // Extents
   {
+    bool requested_window_extents_changed = false;
     auto& vk_surface_capabilities = m_surface->GetVkSurfaceCapabilities2();
-    uint32_t max_width = vk_surface_capabilities.surfaceCapabilities.maxImageExtent.width;
-    uint32_t max_height = vk_surface_capabilities.surfaceCapabilities.maxImageExtent.height;
-    if ((max_width < m_configuration.window.width) || (max_height < m_configuration.window.height)) {
-      VKEX_LOG_WARN("Swapchain extents readjusted from "
-                     << m_configuration.window.width << "x" << m_configuration.window.height
-                     << " to " 
-                     << max_width << "x" << max_height);
+    {
+        uint32_t max_width = vk_surface_capabilities.surfaceCapabilities.maxImageExtent.width;
+        uint32_t max_height = vk_surface_capabilities.surfaceCapabilities.maxImageExtent.height;
+        if ((max_width < m_configuration.window.width) || (max_height < m_configuration.window.height)) {
+            VKEX_LOG_WARN("Swapchain extents readjusted from "
+                << m_configuration.window.width << "x" << m_configuration.window.height
+                << " to "
+                << max_width << "x" << max_height);
+            requested_window_extents_changed = true;
+        }
+        m_configuration.window.width = std::min(m_configuration.window.width, max_width);
+        m_configuration.window.height = std::min(m_configuration.window.height, max_height);
     }
-    m_configuration.window.width = std::min(m_configuration.window.width, max_width);
-    m_configuration.window.height = std::min(m_configuration.window.height, max_height);
+
+    {
+        uint32_t min_width = vk_surface_capabilities.surfaceCapabilities.minImageExtent.width;
+        uint32_t min_height = vk_surface_capabilities.surfaceCapabilities.minImageExtent.height;
+        if ((min_width > m_configuration.window.width) || (min_height > m_configuration.window.height)) {
+            VKEX_LOG_WARN("Swapchain extents readjusted from "
+                << m_configuration.window.width << "x" << m_configuration.window.height
+                << " to "
+                << min_width << "x" << min_height);
+            requested_window_extents_changed = true;
+        }
+        m_configuration.window.width = std::max(m_configuration.window.width, min_width);
+        m_configuration.window.height = std::max(m_configuration.window.height, min_height);
+    }
+
+    if (requested_window_extents_changed) {
+        VKEX_LOG_WARN("GLFW window size readjusted to match swapchain extents");
+        glfwSetWindowSize(m_window, m_configuration.window.width, m_configuration.window.height);
+    }
+  }
+
+  // Swapchain memory pool (interesting comments inside implementation)
+  {
+    vkex::Result vkex_result = InitializeVkexSwapchainImageMemoryPool();
+    if (!vkex_result) {
+        return vkex_result;
+    }
   }
 
   // Swapchain
@@ -1354,14 +1385,6 @@ vkex::Result Application::InitializeVkex()
   // Device
   {
     vkex::Result vkex_result = InitializeVkexDevice();
-    if (!vkex_result) {
-      return vkex_result;
-    }
-  }
-
-  // Swapchain memory pool
-  if (IsApplicationModeWindow()) {
-    vkex::Result vkex_result = InitializeVkexSwapchainImageMemoryPool();
     if (!vkex_result) {
       return vkex_result;
     }

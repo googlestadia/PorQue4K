@@ -25,6 +25,11 @@
 //   * Possibly share structs with shaders?
 // * Shared header for stuff like TG dims
 
+void VkexInfoApp::AddArgs(vkex::ArgParser& args)
+{
+    args.AddOptionInt("h", "height", "Height of swapchain image (1080, 2160)", 1080);
+}
+
 void VkexInfoApp::Configure(const vkex::ArgParser& args, vkex::Configuration& configuration)
 {
     configuration.window.resizeable = false;
@@ -50,12 +55,32 @@ void VkexInfoApp::Configure(const vkex::ArgParser& args, vkex::Configuration& co
     configuration.graphics_debug.message_severity.error = false;
     configuration.graphics_debug.message_type.validation = false;
 
-    auto present_res_key = FindPresentResolutionKey(configuration.window.width);
-    SetPresentResolution(present_res_key);
+    int32_t requested_height = 1080;
+    args.GetInt("h", "height", &requested_height);
+
+    // On platforms where the swapchain size is fixed, this will
+    // be overridden when surface capabilities are obtained.
+    if (requested_height == 2160) {
+        configuration.window.width = 3840;
+        configuration.window.height = 2160;
+    } else {
+        configuration.window.width = 1920;
+        configuration.window.height = 1080;
+    }
+
+    if ((requested_height != 2160) && (requested_height != 1080)) {
+        VKEX_LOG_WARN("Requested window height is unsupported: " << requested_height);
+        VKEX_LOG_WARN("Window dimensions defaulting to 1920 x 1080");
+    }
 }
 
 void VkexInfoApp::Setup()
 {
+    {
+        auto present_res_key = FindPresentResolutionKey(GetConfiguration().window.width);
+        SetPresentResolution(present_res_key);
+    }
+
     {
         auto helmet_path = GetAssetPath("models/DamagedHelmet/glTF/DamagedHelmet.gltf");
 
@@ -401,10 +426,6 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
         cmd->CmdSetViewport(swapchain_render_pass->GetFullRenderArea());
         cmd->CmdSetScissor(swapchain_render_pass->GetFullRenderArea());
         
-        // TODO: Make sure this size is multiplied for current present resolution
-        // TODO: Figure out how to change FontSize?
-
-        ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiCond_Once);
         this->DrawAppInfoGUI();
         this->DrawImGui(cmd);
 
@@ -426,7 +447,6 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
 
 int main(int argc, char** argv)
 {
-    // TODO: Drive resolution from input
     VkexInfoApp app;
     vkex::Result vkex_result = app.Run(argc, argv);
     if (!vkex_result) {

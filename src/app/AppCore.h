@@ -119,10 +119,11 @@ class VkexInfoApp
     : public vkex::Application
 {
 public:
-    VkexInfoApp() : vkex::Application(1920, 1080, "PorQue4K") {}
+    VkexInfoApp() : vkex::Application("PorQue4K") {}
     virtual ~VkexInfoApp() {}
 
     // main.cpp
+    void AddArgs(vkex::ArgParser& args);
     void Configure(const vkex::ArgParser& args, vkex::Configuration& configuration);
     void Setup();
     void Update(double frame_elapsed_time);
@@ -149,6 +150,8 @@ protected:
     // mean it represents 1 output pixel per thread
     vkex::uint3 CalculateSimpleDispatchDimensions(GeneratedShaderState& gen_shader_state, VkExtent2D dest_image_extent);
 
+    ImVec2 GetSuggestedGUISize();
+    float GetSuggestedFontScale();
     void DrawAppInfoGUI();
 
     // AppRender.cpp

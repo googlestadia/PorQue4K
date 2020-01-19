@@ -175,13 +175,44 @@ vkex::uint3 VkexInfoApp::CalculateSimpleDispatchDimensions(GeneratedShaderState&
     return dispatch_dims;
 }
 
+ImVec2 VkexInfoApp::GetSuggestedGUISize()
+{
+    ImVec2 gui_window_size(400, 400);
+
+    auto present_extent = GetPresentResolutionExtent();
+    if (present_extent.height == 2160) {
+        gui_window_size = ImVec2(800, 800);
+    }
+
+    return gui_window_size;
+}
+
+float VkexInfoApp::GetSuggestedFontScale()
+{
+    float font_scale = 1.0f;
+
+    auto present_extent = GetPresentResolutionExtent();
+    if (present_extent.height == 2160) {
+        font_scale = 2.f;
+    }
+
+    return font_scale;
+}
+
 void VkexInfoApp::DrawAppInfoGUI()
 {
     if (!m_configuration.enable_imgui) {
         return;
     }
 
+    ImVec2 gui_window_size = GetSuggestedGUISize();
+    ImGui::SetNextWindowSize(gui_window_size, ImGuiCond_Once);
+
     if (ImGui::Begin("Application Info")) {
+
+        auto font_scale = GetSuggestedFontScale();
+        ImGui::SetWindowFontScale(font_scale);
+
         {
             ImGui::Columns(2);
             {
