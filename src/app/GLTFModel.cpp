@@ -102,8 +102,17 @@ VkFormat GetTextureFormatFromImage(const tinygltf::Image& image, const bool use_
     return textureFormat;
 }
 
-void GLTFModel::PopulateFromModel(tinygltf::Model& model, vkex::Queue queue)
+void GLTFModel::PopulateFromModel(vkex::fs::path model_path, vkex::Queue queue)
 {
+    tinygltf::Model model;
+    {
+        tinygltf::TinyGLTF loader;
+        std::string err;
+        std::string warn;
+
+        bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, model_path.str());
+    }
+
     // TODO: accessors could be sparse, gotta check for it
 
     m_buffers.resize(model.bufferViews.size());

@@ -83,15 +83,7 @@ void VkexInfoApp::Setup()
 
     {
         auto helmet_path = GetAssetPath("models/DamagedHelmet/glTF/DamagedHelmet.gltf");
-
-        tinygltf::Model model;
-        tinygltf::TinyGLTF loader;
-        std::string err;
-        std::string warn;
-
-        bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, helmet_path.str());
-
-        m_helmet_model.PopulateFromModel(model, GetGraphicsQueue());
+        m_helmet_model.PopulateFromModel(helmet_path, GetGraphicsQueue());
     }
 
     // TODO: How we manage images will change with checkerboard...

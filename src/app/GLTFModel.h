@@ -27,7 +27,7 @@ public:
     GLTFModel() {}
     virtual ~GLTFModel() {}
 
-    void PopulateFromModel(tinygltf::Model& model, vkex::Queue queue);
+    void PopulateFromModel(vkex::fs::path model_path, vkex::Queue queue);
 
     // For building pipeline binding descriptions/attributes
     std::vector<vkex::VertexBindingDescription> GetVertexBindingDescriptions(uint32_t node_index, uint32_t primitive_index);
