@@ -23,7 +23,6 @@ void VkexInfoApp::SetupImagesAndRenderPasses(const VkExtent2D present_extent,
                                              const VkFormat depth_format)
 {
     {
-        vkex::Result vkex_result = vkex::Result::Undefined;
         VKEX_CALL(CreateSimpleRenderPass(
             GetDevice(),
             GetGraphicsQueue(),
@@ -33,7 +32,6 @@ void VkexInfoApp::SetupImagesAndRenderPasses(const VkExtent2D present_extent,
     }
 
     {
-        vkex::Result vkex_result = vkex::Result::Undefined;
         VKEX_CALL(CreateSimpleRenderPass(
             GetDevice(),
             GetGraphicsQueue(),
@@ -61,15 +59,25 @@ void VkexInfoApp::SetupImagesAndRenderPasses(const VkExtent2D present_extent,
         create_info.image.host_visible = false;
         create_info.image.device_local = true;
         create_info.view.derive_from_image = true;
-
-        vkex::Result vkex_result = vkex::Result::Undefined;
-        VKEX_CALL(GetDevice()->CreateTexture(create_info, &m_target_texture));
+        
+        {
+            VKEX_CALL(GetDevice()->CreateTexture(create_info, &m_target_texture));
+        }
+        {
+            VKEX_CALL(GetDevice()->CreateTexture(create_info, &m_visualization_texture));
+        }
     }
 
     {
-        vkex::Result vkex_result = vkex::Result::Undefined;
         VKEX_CALL(vkex::TransitionImageLayout(GetGraphicsQueue(),
             m_target_texture,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_GENERAL,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT));
+    }
+    {
+        VKEX_CALL(vkex::TransitionImageLayout(GetGraphicsQueue(),
+            m_visualization_texture,
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_GENERAL,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT));
@@ -116,7 +124,6 @@ void VkexInfoApp::SetupShaders(const std::vector<ShaderProgramInputs>& shader_in
         {
             vkex::PipelineLayoutCreateInfo create_info = {};
             create_info.descriptor_set_layouts.push_back(vkex::ToVulkan(gen_shader_state.descriptor_set_layout));
-            vkex::Result vkex_result = vkex::Result::Undefined;
             VKEX_CALL(GetDevice()->CreatePipelineLayout(create_info, &gen_shader_state.pipeline_layout));
         }
 
@@ -126,7 +133,6 @@ void VkexInfoApp::SetupShaders(const std::vector<ShaderProgramInputs>& shader_in
                 create_info.shader_program = gen_shader_state.program;
                 create_info.pipeline_layout = gen_shader_state.pipeline_layout;
 
-                vkex::Result vkex_result = vkex::Result::Undefined;
                 VKEX_CALL(GetDevice()->CreateComputePipeline(create_info, &gen_shader_state.compute_pipeline));
             }
             else {
@@ -134,7 +140,6 @@ void VkexInfoApp::SetupShaders(const std::vector<ShaderProgramInputs>& shader_in
                 gfx_create_info.shader_program = gen_shader_state.program;
                 gfx_create_info.pipeline_layout = gen_shader_state.pipeline_layout;
 
-                vkex::Result vkex_result = vkex::Result::Undefined;
                 VKEX_CALL(GetDevice()->CreateGraphicsPipeline(gfx_create_info, &gen_shader_state.graphics_pipeline));
             }
         }

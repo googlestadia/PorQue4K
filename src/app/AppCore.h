@@ -59,8 +59,8 @@ enum ShaderPipelineType {
 enum AppShaderList {
     Geometry = 0,
     InternalToTargetScaledCopy = 1,
-    TargetToPresentScaledCopy = 2,
-    InternalTargetImageDelta = 3,
+    InternalTargetImageDelta = 2,
+    TargetToPresentScaledCopy = 3,
     NumTypes,
 };
 
@@ -115,6 +115,32 @@ enum DeltaVisualizerMode {
     kDeltaVizCount,
 };
 
+enum TimerTag {
+    kSceneRenderInternal = 0,
+    kUpscaleInternal = 1,
+    kTotalInternal = 2,
+    kSceneRenderTarget = 3,
+    kTimerTagCount,
+    kTimerQueryCount = kTimerTagCount * 2,
+};
+
+
+struct GpuTimerInfo {
+    uint64_t start_time;
+    uint64_t end_time;
+};
+
+struct PerFrameData {
+    vkex::QueryPool timer_query_pool;
+    
+    bool timestamps_issued = false;
+    bool timestamps_readback = false;
+
+    std::vector<GpuTimerInfo> issued_gpu_timers;
+    // TODO: Other stuff that might need to be inspected from previous
+    // frames, such as targeted resolution or previous frame images
+};
+
 class VkexInfoApp
     : public vkex::Application
 {
@@ -146,16 +172,21 @@ protected:
     void BuildInternalResolutionTextList(std::vector<const char*>& internal_text_list);
     void BuildTargetResolutionTextList(std::vector<const char*>& target_text_list);
 
+    void IssueGpuTimeStart(vkex::CommandBuffer cmd, PerFrameData& per_frame_data, TimerTag tag);
+    void IssueGpuTimeEnd(vkex::CommandBuffer cmd, PerFrameData& per_frame_data, TimerTag tag);
+    void ReadbackGpuTimestamps(uint32_t frame_index);
+    double CalculateGpuTimeRange(const PerFrameData& per_frame_data, TimerTag requested_range, double nano_scaler);
+
     // TODO: This is very informal because the TG size doesn't necessarily 
     // mean it represents 1 output pixel per thread
     vkex::uint3 CalculateSimpleDispatchDimensions(GeneratedShaderState& gen_shader_state, VkExtent2D dest_image_extent);
 
     ImVec2 GetSuggestedGUISize();
     float GetSuggestedFontScale();
-    void DrawAppInfoGUI();
+    void DrawAppInfoGUI(uint32_t frame_index);
 
     // AppRender.cpp
-    void ProcessInternalToTarget(vkex::CommandBuffer cmd, uint32_t frame_index);
+    void RenderInternalAndTarget(vkex::CommandBuffer cmd, uint32_t frame_index);
     void UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t frame_index);
     void VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t frame_index);
 
@@ -192,6 +223,7 @@ private:
     SimpleRenderPass            m_internal_draw_simple_render_pass = {};
     SimpleRenderPass            m_internal_as_target_draw_simple_render_pass = {};
     vkex::Texture               m_target_texture = nullptr;
+    vkex::Texture               m_visualization_texture = nullptr;
 
     // TODO: Handle dynamic resolution?
 
@@ -208,6 +240,8 @@ private:
 
     // TODO: Eventually this becomes a list of models (somewhere) and a pointer for the active model
     GLTFModel                        m_helmet_model;
+
+    std::vector<PerFrameData> m_per_frame_datas;
 };
 
 #endif // __APP_CORE_H__

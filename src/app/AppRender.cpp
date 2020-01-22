@@ -16,8 +16,12 @@
 
 #include "AppCore.h"
 
-void VkexInfoApp::ProcessInternalToTarget(vkex::CommandBuffer cmd, uint32_t frame_index)
+void VkexInfoApp::RenderInternalAndTarget(vkex::CommandBuffer cmd, uint32_t frame_index)
 {
+    // TODO: These constant buffer updates probably happen in-line with the renders
+    // in the future
+    VKEX_CALL(m_simple_draw_constant_buffers[frame_index]->Copy(m_simple_draw_view_transform_constants.size, &m_simple_draw_view_transform_constants.data));
+
     {
         auto& scaled_tex_copy_cb = m_internal_to_target_scaled_copy_constant_buffers[frame_index];
         VKEX_CALL(scaled_tex_copy_cb->Copy(
@@ -25,15 +29,58 @@ void VkexInfoApp::ProcessInternalToTarget(vkex::CommandBuffer cmd, uint32_t fram
             &m_internal_to_target_scaled_copy_constants.data));
     }
 
-    if (m_delta_visualizer_mode == DeltaVisualizerMode::kDisabled) {
-        UpscaleInternalToTarget(cmd, frame_index);
-    } else {
-        VisualizeInternalTargetDelta(cmd, frame_index);
+    auto& per_frame_data = m_per_frame_datas[frame_index];
+
+    cmd->Begin();
+
+    {
+        cmd->CmdResetQueryPool(per_frame_data.timer_query_pool, 0, TimerTag::kTimerQueryCount);
+        per_frame_data.timestamps_issued = true;
     }
+
+    IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kTotalInternal);
+    {
+
+        IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kSceneRenderInternal);
+        {
+
+            auto render_pass = m_internal_draw_simple_render_pass.render_pass;
+
+            VkClearValue rtv_clear = {};
+            VkClearValue dsv_clear = {};
+            dsv_clear.depthStencil.depth = 1.0f;
+            dsv_clear.depthStencil.stencil = 0xFF;
+            std::vector<VkClearValue> clear_values = { rtv_clear, dsv_clear };
+            cmd->CmdBeginRenderPass(render_pass, &clear_values);
+
+            cmd->CmdSetViewport(m_internal_render_area);
+            cmd->CmdSetScissor(m_internal_render_area);
+
+            cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::Geometry].graphics_pipeline);
+            cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS,
+                *(m_generated_shader_states[AppShaderList::Geometry].pipeline_layout),
+                0,
+                { *(m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]) });
+
+            DrawModel(cmd);
+
+            cmd->CmdEndRenderPass();
+        }
+        IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kSceneRenderInternal);
+
+        UpscaleInternalToTarget(cmd, frame_index);
+    }
+    IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kTotalInternal);
+
+    VisualizeInternalTargetDelta(cmd, frame_index);
+
+    cmd->End();
 }
 
 void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t frame_index)
 {
+    auto& per_frame_data = m_per_frame_datas[frame_index];
+
     cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -45,10 +92,14 @@ void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t fram
         0,
         { *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]) });
 
-    vkex::uint3 dispatchDims = CalculateSimpleDispatchDimensions(
-        m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy],
-        GetTargetResolutionExtent());
-    cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
+    IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kUpscaleInternal);
+    {
+        vkex::uint3 dispatchDims = CalculateSimpleDispatchDimensions(
+            m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy],
+            GetTargetResolutionExtent());
+        cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
+    }
+    IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kUpscaleInternal);
 
     cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -58,6 +109,8 @@ void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t fram
 
 void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t frame_index)
 {
+    auto& per_frame_data = m_per_frame_datas[frame_index];
+
     {
         auto& image_delta_options_cb = m_image_delta_options_constant_buffers[frame_index];
         VKEX_CALL(image_delta_options_cb->Copy(
@@ -66,7 +119,9 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t
     }
 
     // Target resolution draw
+    IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kSceneRenderTarget);
     {
+
         auto render_pass = m_internal_as_target_draw_simple_render_pass.render_pass;
 
         VkClearValue rtv_clear = {};
@@ -87,9 +142,11 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t
 
         cmd->CmdEndRenderPass();
     }
+    IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kSceneRenderTarget);
 
-    cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    // Run delta visualizer
+    cmd->CmdTransitionImageLayout(m_target_texture,
+        VK_IMAGE_LAYOUT_GENERAL,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
     cmd->CmdTransitionImageLayout(m_internal_as_target_draw_simple_render_pass.rtv_texture,
@@ -108,9 +165,9 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t
         GetTargetResolutionExtent());
     cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
 
-    cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
+    cmd->CmdTransitionImageLayout(m_target_texture,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_IMAGE_LAYOUT_GENERAL,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
     cmd->CmdTransitionImageLayout(m_internal_as_target_draw_simple_render_pass.rtv_texture,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,

@@ -16,6 +16,9 @@
 
 #include "AppCore.h"
 
+// Enable if we want simple CPU metrics in GUI
+//#define GUI_CPU_STATS
+
 // TODO: Maybe move resolution tables to another file? To be included directly?
 
 struct ResolutionInfo {
@@ -163,6 +166,65 @@ void VkexInfoApp::BuildTargetResolutionTextList(std::vector<const char*>& target
     }
 }
 
+void VkexInfoApp::IssueGpuTimeStart(vkex::CommandBuffer cmd, PerFrameData& per_frame_data, TimerTag tag)
+{
+    uint32_t slot = tag * 2;
+    cmd->CmdWriteTimestamp(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, per_frame_data.timer_query_pool, slot);
+}
+
+void VkexInfoApp::IssueGpuTimeEnd(vkex::CommandBuffer cmd, PerFrameData& per_frame_data, TimerTag tag)
+{
+    uint32_t slot = (tag * 2) + 1;
+    cmd->CmdWriteTimestamp(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, per_frame_data.timer_query_pool, slot);
+}
+
+void VkexInfoApp::ReadbackGpuTimestamps(uint32_t frame_index)
+{
+    auto& per_frame_data = m_per_frame_datas[frame_index];
+
+    if (per_frame_data.timestamps_issued == false) {
+        return;
+    }
+
+    per_frame_data.timestamps_issued = false;
+
+    const uint32_t query_count = TimerTag::kTimerQueryCount;
+
+    std::vector<uint64_t> data(query_count);
+    const uint32_t stride = sizeof(uint64_t);
+    const size_t   data_size = data.size() * stride;
+
+    VkResult vk_result = vkex::GetQueryPoolResults(
+        *GetDevice(),
+        *per_frame_data.timer_query_pool,
+        0,
+        query_count,
+        data_size,
+        data.data(),
+        stride,
+        (VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT));
+    VKEX_ASSERT(vk_result == VK_SUCCESS);
+
+    for (uint32_t tag_index = 0; tag_index < TimerTag::kTimerTagCount; tag_index++) {
+        uint32_t slot_start_index = tag_index * 2;
+
+        per_frame_data.issued_gpu_timers[tag_index].start_time  = data[slot_start_index + 0];
+        per_frame_data.issued_gpu_timers[tag_index].end_time    = data[slot_start_index + 1];
+    }
+    
+    per_frame_data.timestamps_readback = true;
+}
+
+double VkexInfoApp::CalculateGpuTimeRange(const PerFrameData& per_frame_data, TimerTag requested_range, double nano_scaler)
+{
+    const double timestamp_period = static_cast<double>(GetDevice()->GetPhysicalDevice()->GetPhysicalDeviceLimits().timestampPeriod);
+
+    const auto& requested_timer_range = per_frame_data.issued_gpu_timers[requested_range];
+    auto gpu_ticks = requested_timer_range.end_time - requested_timer_range.start_time;
+
+    return (gpu_ticks * timestamp_period * nano_scaler);
+}
+
 vkex::uint3 VkexInfoApp::CalculateSimpleDispatchDimensions(GeneratedShaderState& gen_shader_state, VkExtent2D dest_image_extent)
 {
     auto tg_dims = gen_shader_state.program->GetInterface().GetThreadgroupDimensions();
@@ -181,7 +243,8 @@ ImVec2 VkexInfoApp::GetSuggestedGUISize()
 
     auto present_extent = GetPresentResolutionExtent();
     if (present_extent.height == 2160) {
-        gui_window_size = ImVec2(800, 800);
+        gui_window_size.x *= 2;
+        gui_window_size.y *= 2;
     }
 
     return gui_window_size;
@@ -199,7 +262,7 @@ float VkexInfoApp::GetSuggestedFontScale()
     return font_scale;
 }
 
-void VkexInfoApp::DrawAppInfoGUI()
+void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index)
 {
     if (!m_configuration.enable_imgui) {
         return;
@@ -229,7 +292,111 @@ void VkexInfoApp::DrawAppInfoGUI()
             }
             ImGui::Columns(1);
         }
+        
+        ImGui::Separator();
 
+        // Upscale info
+        {
+            // TODO: Upscale selector
+            // TODO: Visualizer selector
+            //          Target res
+            //          Upscaled
+            //          Delta visualizers...
+            ImGui::Columns(2);
+            {
+                std::vector<const char*> resolution_items;
+                BuildInternalResolutionTextList(resolution_items);
+
+                ImGui::Text("Internal resolution");
+                ImGui::NextColumn();
+                ImGui::Combo("##InternalRes", (int*)(&m_selected_internal_resolution_index), resolution_items.data(), int(resolution_items.size()));
+                ImGui::NextColumn();
+            }
+            {
+                std::vector<const char*> resolution_items;
+                BuildTargetResolutionTextList(resolution_items);
+
+                ImGui::Text("Target Resolution");
+                ImGui::NextColumn();
+                ImGui::Combo("##TargetRes", (int*)(&m_selected_target_resolution_index), resolution_items.data(), int(resolution_items.size()));
+                ImGui::NextColumn();
+            }
+            {
+                ImGui::Text("Present Resolution");
+                ImGui::NextColumn();
+                ImGui::Text(GetPresentResolutionText());
+                ImGui::NextColumn();
+            }
+            {
+                std::vector<const char*> visualizer_items = {"Off", "Luma delta", "RGB delta"};
+                VKEX_ASSERT(int(visualizer_items.size()) == int(DeltaVisualizerMode::kDeltaVizCount));
+                ImGui::Text("Delta Visualizer");
+                ImGui::NextColumn();
+                ImGui::Combo("##DeltaViz", (int*)(&m_delta_visualizer_mode), visualizer_items.data(), int(visualizer_items.size()));
+                ImGui::NextColumn();
+            }
+            ImGui::Columns(1);
+        }
+
+        ImGui::Separator();
+
+        auto& per_frame_data = m_per_frame_datas[frame_index];
+        if (per_frame_data.timestamps_readback == true)
+        {
+            ImGui::Columns(2);
+            {
+                ImGui::Text("GPU Timers");
+                ImGui::NextColumn();
+                ImGui::NextColumn();
+            }
+            {
+                ImGui::Text("Internal");
+                ImGui::NextColumn();
+                ImGui::NextColumn();
+            }
+            {
+                double ms_diff = CalculateGpuTimeRange(per_frame_data, TimerTag::kTotalInternal, VKEX_TIMER_NANOS_TO_MILLIS);
+
+                ImGui::Text("  Total Time");
+                ImGui::NextColumn();
+                ImGui::Text("%f ms", ms_diff);
+                ImGui::NextColumn();
+            }
+            {
+                double ms_diff = CalculateGpuTimeRange(per_frame_data, TimerTag::kSceneRenderInternal, VKEX_TIMER_NANOS_TO_MILLIS);
+
+                ImGui::Text("    Scene Draw Time");
+                ImGui::NextColumn();
+                ImGui::Text("%f ms", ms_diff);
+                ImGui::NextColumn();
+            }
+            {
+                double ms_diff = CalculateGpuTimeRange(per_frame_data, TimerTag::kUpscaleInternal, VKEX_TIMER_NANOS_TO_MILLIS);
+
+                ImGui::Text("    Upscale Time");
+                ImGui::NextColumn();
+                ImGui::Text("%f ms", ms_diff);
+                ImGui::NextColumn();
+            }
+            {
+                ImGui::Text("Target");
+                ImGui::NextColumn();
+                ImGui::NextColumn();
+            }
+            {
+                double ms_diff = CalculateGpuTimeRange(per_frame_data, TimerTag::kSceneRenderTarget, VKEX_TIMER_NANOS_TO_MILLIS);
+
+                ImGui::Text("  Scene Render Time");
+                ImGui::NextColumn();
+                ImGui::Text("%f ms", ms_diff);
+                ImGui::NextColumn();
+            }
+        }
+
+        // TODO: Model picker?
+
+#if defined(GUI_CPU_STATS)
+        // TODO: Make these collapsable?
         ImGui::Separator();
 
         {
@@ -309,63 +476,7 @@ void VkexInfoApp::DrawAppInfoGUI()
             }
             ImGui::Columns(1);
         }
-        
-        ImGui::Separator();
-
-        // Upscale info
-        {
-            // TODO: Upscale selector
-            // TODO: Visualizer selector
-            //          Target res
-            //          Upscaled
-            //          Delta visualizers...
-            ImGui::Columns(2);
-            {
-                std::vector<const char*> resolution_items;
-                BuildInternalResolutionTextList(resolution_items);
-
-                ImGui::Text("Internal resolution");
-                ImGui::NextColumn();
-                ImGui::Combo("##InternalRes", (int*)(&m_selected_internal_resolution_index), resolution_items.data(), int(resolution_items.size()));
-                ImGui::NextColumn();
-            }
-            {
-                std::vector<const char*> resolution_items;
-                BuildTargetResolutionTextList(resolution_items);
-
-                ImGui::Text("Target Resolution");
-                ImGui::NextColumn();
-                ImGui::Combo("##TargetRes", (int*)(&m_selected_target_resolution_index), resolution_items.data(), int(resolution_items.size()));
-                ImGui::NextColumn();
-            }
-            {
-                ImGui::Text("Present Resolution");
-                ImGui::NextColumn();
-                ImGui::Text(GetPresentResolutionText());
-                ImGui::NextColumn();
-            }
-            {
-                std::vector<const char*> visualizer_items = {"Off", "Luma delta", "RGB delta"};
-                VKEX_ASSERT(int(visualizer_items.size()) == int(DeltaVisualizerMode::kDeltaVizCount));
-                ImGui::Text("Delta Visualizer");
-                ImGui::NextColumn();
-                ImGui::Combo("##DeltaViz", (int*)(&m_delta_visualizer_mode), visualizer_items.data(), int(visualizer_items.size()));
-                ImGui::NextColumn();
-            }
-            ImGui::Columns(1);
-        }
-
-        ImGui::Separator();
-
-        // TODO: GPU stats
-        {
-            // TODO: GPU Render time
-            // TODO: Total full res pass time
-            // TODO: Total upscaled pass time
-            // TODO: Upscale pass time
-        }
-
-        // TODO: Model picker?
+#endif // defined(GUI_CPU_STATS)
     }
     ImGui::End();
 }

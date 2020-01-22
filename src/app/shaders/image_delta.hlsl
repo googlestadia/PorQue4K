@@ -32,8 +32,9 @@ RWTexture2D<float4> out_texture : register(u4);
 
 static const float3 luma_consts = float3(0.2126, 0.7152, 0.0722);
 
-static const uint kLumaDelta = 0;
-static const uint kRGBDelta = 1;
+static const uint kDisabledViz = 0;
+static const uint kLumaDelta = 1;
+static const uint kRGBDelta = 2;
 
 [numthreads(16, 16, 1)]
 void csmain(uint3 dispatch_id : SV_DispatchThreadID)
@@ -43,16 +44,13 @@ void csmain(uint3 dispatch_id : SV_DispatchThreadID)
         return;
     }
 
-    uint2 src_coords;
-    src_coords.x = uint((dispatch_id.x * TexDims.srcWidth) / TexDims.dstWidth);
-    src_coords.y = uint((dispatch_id.y * TexDims.srcHeight) / TexDims.dstHeight);
+    uint2 src_coords = dispatch_id.xy;
 
     float4 internalPixel = internal_res_texture[src_coords];
     float4 nativePixel = target_res_texture[dispatch_id.xy];
 
     float3 outColor;
 
-    // TODO: If I only keep two modes, I could make this a lerp
     if (kLumaDelta == Options.vizMode) {
         float internalLuma = dot(internalPixel.rgb, luma_consts);
         float nativeLuma = dot(nativePixel.rgb, luma_consts);
@@ -60,9 +58,12 @@ void csmain(uint3 dispatch_id : SV_DispatchThreadID)
         float lumaDelta = abs(internalLuma - nativeLuma);
 
         outColor = float3(lumaDelta, lumaDelta, lumaDelta);
-    } else {
+    } else if (kRGBDelta == Options.vizMode) {
         outColor = abs(internalPixel.rgb - nativePixel.rgb);
+    } else {
+        outColor = internalPixel.rgb;
     }
+
 
     out_texture[dispatch_id.xy] = float4(outColor, 0.f);
 }

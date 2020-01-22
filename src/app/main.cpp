@@ -129,18 +129,18 @@ void VkexInfoApp::Setup()
             shader_inputs[AppShaderList::InternalToTargetScaledCopy].shader_paths[0] = GetAssetPath("shaders/copy_texture.cs.spv");
         }
         {
+            shader_inputs[AppShaderList::InternalTargetImageDelta].pipeline_type = ShaderPipelineType::Compute;
+
+            shader_inputs[AppShaderList::InternalTargetImageDelta].shader_paths.resize(1);
+            shader_inputs[AppShaderList::InternalTargetImageDelta].shader_paths[0] = GetAssetPath("shaders/image_delta.cs.spv");
+        }
+        {
             // TODO: Right now, we'll re-use the previous shader, but this probably has to change to a graphics blit because of
             // swapchain + compute usage issues
             shader_inputs[AppShaderList::TargetToPresentScaledCopy].pipeline_type = ShaderPipelineType::Compute;
 
             shader_inputs[AppShaderList::TargetToPresentScaledCopy].shader_paths.resize(1);
             shader_inputs[AppShaderList::TargetToPresentScaledCopy].shader_paths[0] = GetAssetPath("shaders/copy_texture.cs.spv");
-        }
-        {
-            shader_inputs[AppShaderList::InternalTargetImageDelta].pipeline_type = ShaderPipelineType::Compute;
-
-            shader_inputs[AppShaderList::InternalTargetImageDelta].shader_paths.resize(1);
-            shader_inputs[AppShaderList::InternalTargetImageDelta].shader_paths[0] = GetAssetPath("shaders/image_delta.cs.spv");
         }
 
         SetupShaders(shader_inputs, m_generated_shader_states);
@@ -233,21 +233,47 @@ void VkexInfoApp::Setup()
             m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(1, m_internal_draw_simple_render_pass.rtv_texture);
             m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(2, m_target_texture);
 
-            m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(0, m_target_to_present_scaled_copy_constant_buffers[frame_index]);
-            m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(1, m_target_texture);
-
             // TODO: I can re-use constant buffers, but should probably rename for clarity
+            // TODO: Simplify this constant buffer because all images are the same size?
             m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(0, m_internal_to_target_scaled_copy_constant_buffers[frame_index]);
             m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(1, m_image_delta_options_constant_buffers[frame_index]);
-            m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(2, m_internal_draw_simple_render_pass.rtv_texture);
+            m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(2, m_target_texture);
             m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(3, m_internal_as_target_draw_simple_render_pass.rtv_texture);
-            m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(4, m_target_texture);
+            m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(4, m_visualization_texture);
+
+            m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(0, m_target_to_present_scaled_copy_constant_buffers[frame_index]);
+            m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(1, m_visualization_texture);
         }
     }
+
+    // Timer setup
+    {
+        auto frame_count = GetConfiguration().frame_count;
+        m_per_frame_datas.resize(frame_count);
+
+        for (uint32_t frame_index = 0; frame_index < frame_count; frame_index++) {
+            auto& per_frame_data = m_per_frame_datas[frame_index];
+            
+            // TODO: Perhaps one pool for all frames?
+
+            vkex::QueryPoolCreateInfo query_pool_create_info = {};
+            query_pool_create_info.query_type = VkQueryType::VK_QUERY_TYPE_TIMESTAMP;
+            query_pool_create_info.query_count = TimerTag::kTimerQueryCount;
+            
+            {
+                VKEX_CALL(GetDevice()->CreateQueryPool(query_pool_create_info, &(per_frame_data.timer_query_pool)));
+            }
+
+            per_frame_data.issued_gpu_timers.resize(TimerTag::kTimerTagCount);
+        }
+    }
+    
 }
 
 void VkexInfoApp::Update(double frame_elapsed_time)
 {
+    // Almost entirely doing CPU-side updates of constant buffers
+
     float3 eye = float3(0, 0, 2);
     float3 center = float3(0, 0, 0);
     float3 up = float3(0, 1, 0);
@@ -286,55 +312,25 @@ void VkexInfoApp::Update(double frame_elapsed_time)
     m_target_to_present_scaled_copy_constants.data.dstWidth = present_res_extent.width;
     m_target_to_present_scaled_copy_constants.data.dstHeight = present_res_extent.height;
 
-    // TODO: This option population code is so stupid
-    if (m_delta_visualizer_mode == DeltaVisualizerMode::kLuminance) {
-        m_image_delta_options_constants.data.vizMode = 0;
-    } else if (m_delta_visualizer_mode == DeltaVisualizerMode::kRGB) {
-        m_image_delta_options_constants.data.vizMode = 1;
-    }
+    VKEX_ASSERT(m_delta_visualizer_mode < DeltaVisualizerMode::kDeltaVizCount);
+    m_image_delta_options_constants.data.vizMode = uint(m_delta_visualizer_mode);
 }
 
 void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
 {
     const auto frame_index = p_data->GetFrameIndex();
-    VKEX_CALL(m_simple_draw_constant_buffers[frame_index]->Copy(m_simple_draw_view_transform_constants.size, &m_simple_draw_view_transform_constants.data));
 
-    // Draw scene at internal resolution
-    auto cmd = p_data->GetCommandBuffer();
-    cmd->Begin();
+    ReadbackGpuTimestamps(frame_index);
 
-    auto render_pass = m_internal_draw_simple_render_pass.render_pass;
-
-    VkClearValue rtv_clear = {};
-    VkClearValue dsv_clear = {};
-    dsv_clear.depthStencil.depth = 1.0f;
-    dsv_clear.depthStencil.stencil = 0xFF;
-    std::vector<VkClearValue> clear_values = { rtv_clear, dsv_clear };
-    cmd->CmdBeginRenderPass(render_pass, &clear_values);
-
-    cmd->CmdSetViewport(m_internal_render_area);
-    cmd->CmdSetScissor(m_internal_render_area);
-
-    cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::Geometry].graphics_pipeline);
-    cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, 
-                               *(m_generated_shader_states[AppShaderList::Geometry].pipeline_layout),
-                               0, 
-                               { *(m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]) });
-
-    DrawModel(cmd);
-
-    cmd->CmdEndRenderPass();
-
-    // Internal -> Target
-    ProcessInternalToTarget(cmd, frame_index);
-
-    cmd->End();
+    RenderInternalAndTarget(p_data->GetCommandBuffer(), frame_index);
 
     SubmitRender(p_data);
 }
 
 void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
 {
+    // TODO: Maybe move the bulk of this to AppRender.cpp?
+
     // TODO: Continue progress for multi-frame overlap by allowing multiple Presents to be in flight.
     // Currently, multiple RenderDatas in flight is implemented, but synchronized to a single PresentData
     // for now. Basically, this means pushing m_frame_fence into PresentData, and re-factoring how
@@ -369,7 +365,7 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
     cmd->Begin();
 
     {
-        cmd->CmdTransitionImageLayout(m_target_texture,
+        cmd->CmdTransitionImageLayout(m_visualization_texture,
             VK_IMAGE_LAYOUT_GENERAL,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
@@ -393,7 +389,7 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
             GetPresentResolutionExtent());
         cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
 
-        cmd->CmdTransitionImageLayout(m_target_texture,
+        cmd->CmdTransitionImageLayout(m_visualization_texture,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             VK_IMAGE_LAYOUT_GENERAL,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
@@ -418,7 +414,7 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
         cmd->CmdSetViewport(swapchain_render_pass->GetFullRenderArea());
         cmd->CmdSetScissor(swapchain_render_pass->GetFullRenderArea());
         
-        this->DrawAppInfoGUI();
+        this->DrawAppInfoGUI(frame_index);
         this->DrawImGui(cmd);
 
         cmd->CmdEndRenderPass();

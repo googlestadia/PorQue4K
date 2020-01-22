@@ -113,14 +113,12 @@ vkex::Result CreateSimpleRenderPass(
     }
 
     {
-        vkex::Result vkex_result = vkex::Result::Undefined;
         VKEX_CALL(vkex::TransitionImageLayout(queue,
             simple_pass.rtv_texture,
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT));
 
-        vkex_result = vkex::Result::Undefined;
         VKEX_CALL(vkex::TransitionImageLayout(queue,
             simple_pass.dsv_texture,
             VK_IMAGE_LAYOUT_UNDEFINED,
