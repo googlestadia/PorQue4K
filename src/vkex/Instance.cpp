@@ -430,10 +430,12 @@ vkex::Result CInstance::InitializePhysicalDevices()
   }
 
   for (auto& vk_physical_device : vk_physical_devices) {
-    // Skip if not an AMD or Intel GPU for now
+    // Skip if not an AMD, Intel, or NVIDIA GPU for now
     VkPhysicalDeviceProperties vk_properties = {};
     vkGetPhysicalDeviceProperties(vk_physical_device, &vk_properties);
-    if ((vk_properties.vendorID != VKEX_IHV_VENDOR_ID_AMD) && (vk_properties.vendorID != VKEX_IHV_VENDOR_ID_INTEL)) {
+    if ((vk_properties.vendorID != VKEX_IHV_VENDOR_ID_AMD) &&
+        (vk_properties.vendorID != VKEX_IHV_VENDOR_ID_INTEL) &&
+        (vk_properties.vendorID != VKEX_IHV_VENDOR_ID_NVIDIA)) {
       continue;
     }
 
