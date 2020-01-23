@@ -129,17 +129,12 @@ function(compile_hlsl_cs hlsl_path output_dir working_dir)
 endfunction()
 
 if(GGP)
-    # Spoof the glfw lib so we don't need to build it
-    add_library(glfw STATIC IMPORTED)
-    set_property(TARGET glfw PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/external/glfw-ggp/lib/Release/libglfw.a)
-    target_include_directories(glfw INTERFACE external/glfw-ggp/include)
-
     # Needed?
     add_compile_definitions(VKEX_LINUX_GGP=1)
     add_compile_definitions(__yeti__=1)
-else()
-  add_subdirectory(third_party/glfw EXCLUDE_FROM_ALL)
 endif()
+
+add_subdirectory(third_party/glfw EXCLUDE_FROM_ALL)
 
 # TODO: There's really only one app here, so do we really need to
 # build vkex in it's own lib?
