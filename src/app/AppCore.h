@@ -19,6 +19,7 @@
 
 #include "vkex/Application.h"
 
+#include "ConstantBufferManager.h"
 #include "GLTFModel.h"
 #include "SimpleRenderPass.h"
 
@@ -31,24 +32,11 @@ using float4x4 = vkex::float4x4;
 
 using uint = vkex::uint;
 
-// TODO: Move constant struct defs to another file to share with shaders
-
-struct ViewTransformData {
-    float4x4 ModelViewProjectionMatrix;
-};
+// Placed here to take advantage of the above 'using' directives
+#include "ConstantBufferStructs.h"
 
 using ViewTransformConstants = vkex::ConstantBufferData<ViewTransformData>;
-
-struct ScaledTexCopyDimensionsData {
-    uint srcWidth, srcHeight;
-    uint dstWidth, dstHeight;
-};
-
 using ScaledTexCopyDimsConstants = vkex::ConstantBufferData<ScaledTexCopyDimensionsData>;
-
-struct ImageDeltaOptions {
-    uint vizMode;
-};
 using ImageDeltaOptionsConstants = vkex::ConstantBufferData<ImageDeltaOptions>;
 
 enum ShaderPipelineType {
@@ -203,22 +191,10 @@ private:
     std::vector<GeneratedShaderState> m_generated_shader_states;
     vkex::DescriptorPool              m_shared_descriptor_pool = nullptr;
 
-    // TODO: Is there a struct we can use to manage the CPU/GPU copies of constant data?
-    // TODO: What we should do is to create one big Buffer for all constants (per-frame)
-    // and then allocate chunks out of it, instead of creating all of these stupid
-    // little buffers. VkDescriptorBufferInfo handles the offset into the buffer just fine.
-
     ViewTransformConstants      m_simple_draw_view_transform_constants = {};
-    std::vector<vkex::Buffer>   m_simple_draw_constant_buffers;
-
     ScaledTexCopyDimsConstants  m_internal_to_target_scaled_copy_constants = {};
-    std::vector<vkex::Buffer>   m_internal_to_target_scaled_copy_constant_buffers;
-
-    ScaledTexCopyDimsConstants  m_target_to_present_scaled_copy_constants = {};
-    std::vector<vkex::Buffer>   m_target_to_present_scaled_copy_constant_buffers;
-
     ImageDeltaOptionsConstants  m_image_delta_options_constants = {};
-    std::vector<vkex::Buffer>   m_image_delta_options_constant_buffers;
+    ScaledTexCopyDimsConstants  m_target_to_present_scaled_copy_constants = {};
 
     SimpleRenderPass            m_internal_draw_simple_render_pass = {};
     SimpleRenderPass            m_internal_as_target_draw_simple_render_pass = {};
@@ -240,6 +216,8 @@ private:
 
     // TODO: Eventually this becomes a list of models (somewhere) and a pointer for the active model
     GLTFModel                        m_helmet_model;
+
+    ConstantBufferManager            m_constant_buffer_manager;
 
     std::vector<PerFrameData> m_per_frame_datas;
 };

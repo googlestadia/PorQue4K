@@ -14,22 +14,18 @@
  limitations under the License.
 */
 
+#include "ConstantBufferStructs.h"
+
 struct VSInput {
   float3  PositionOS  : POSITION;
   float3  Normal  : NORMAL;
   float2  UV0  : TEXCOORD0;
-  //float3  VertexColor : VertexColor;
 };
 
 struct VSOutput {
   float4  PositionCS  : SV_Position;
   float3  Normal  : NORMAL;
   float2  UV0  : TEXCOORD0;
-  //float3  VertexColor : VertexColor;
-};
-
-struct ViewTransformData {
-  float4x4 ModelViewProjectionMatrix;
 };
 
 ConstantBuffer<ViewTransformData> ViewTransform : register(b0);
@@ -40,7 +36,6 @@ VSOutput vsmain(VSInput input)
 
   VSOutput output = (VSOutput)0;
   output.PositionCS = mul(ModelViewProjectionMatrix, float4(input.PositionOS, 1));
-  //output.VertexColor = input.VertexColor;
   
   output.Normal = input.Normal;
   output.UV0 = input.UV0;
@@ -52,7 +47,6 @@ struct PSInput {
   float4  PositionCS  : SV_Position;
   float3  Normal  : NORMAL;
   float2  UV0  : TEXCOORD0;
-  //float3  VertexColor : VertexColor; 
 };
 
 // TODO: Can I set these to s0 and t1?
@@ -62,7 +56,6 @@ Texture2D<float4> albedoTexture : register(t2);
 
 float4 psmain(PSInput input) : SV_Target
 {
-  //return float4(input.VertexColor, 1);
   //return float4(1.0f, 0.f, 0.f, 1);
   //return float4(input.UV0.x, input.UV0.y, 0.f, 1);
   //return float4(input.Normal.x, input.Normal.y, input.Normal.z, 1);

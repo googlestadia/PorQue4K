@@ -18,18 +18,9 @@
 
 void VkexInfoApp::RenderInternalAndTarget(vkex::CommandBuffer cmd, uint32_t frame_index)
 {
-    // TODO: These constant buffer updates probably happen in-line with the renders
-    // in the future
-    VKEX_CALL(m_simple_draw_constant_buffers[frame_index]->Copy(m_simple_draw_view_transform_constants.size, &m_simple_draw_view_transform_constants.data));
-
-    {
-        auto& scaled_tex_copy_cb = m_internal_to_target_scaled_copy_constant_buffers[frame_index];
-        VKEX_CALL(scaled_tex_copy_cb->Copy(
-            m_internal_to_target_scaled_copy_constants.size,
-            &m_internal_to_target_scaled_copy_constants.data));
-    }
-
     auto& per_frame_data = m_per_frame_datas[frame_index];
+
+    auto view_transform_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_simple_draw_view_transform_constants);
 
     cmd->Begin();
 
@@ -57,10 +48,13 @@ void VkexInfoApp::RenderInternalAndTarget(vkex::CommandBuffer cmd, uint32_t fram
             cmd->CmdSetScissor(m_internal_render_area);
 
             cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::Geometry].graphics_pipeline);
+
+            std::vector<uint32_t> dynamic_offsets = { view_transform_dynamic_offset };
             cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS,
                 *(m_generated_shader_states[AppShaderList::Geometry].pipeline_layout),
                 0,
-                { *(m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]) });
+                { *(m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]) },
+                &dynamic_offsets);
 
             DrawModel(cmd);
 
@@ -81,16 +75,21 @@ void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t fram
 {
     auto& per_frame_data = m_per_frame_datas[frame_index];
 
+    auto scaled_copy_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_internal_to_target_scaled_copy_constants);
+
     cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
     cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].compute_pipeline);
+
+    std::vector<uint32_t> dynamic_offsets = { scaled_copy_dynamic_offset };
     cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE,
         *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].pipeline_layout),
         0,
-        { *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]) });
+        { *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]) },
+        &dynamic_offsets);
 
     IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kUpscaleInternal);
     {
@@ -111,12 +110,7 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t
 {
     auto& per_frame_data = m_per_frame_datas[frame_index];
 
-    {
-        auto& image_delta_options_cb = m_image_delta_options_constant_buffers[frame_index];
-        VKEX_CALL(image_delta_options_cb->Copy(
-            m_image_delta_options_constants.size,
-            &m_image_delta_options_constants.data));
-    }
+    auto view_transform_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_simple_draw_view_transform_constants);
 
     // Target resolution draw
     IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kSceneRenderTarget);
@@ -133,16 +127,22 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t
         cmd->CmdSetViewport(m_target_render_area);
         cmd->CmdSetScissor(m_target_render_area);
         cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::Geometry].graphics_pipeline);
+
+        std::vector<uint32_t> dynamic_offsets = { view_transform_dynamic_offset };
         cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS,
             *(m_generated_shader_states[AppShaderList::Geometry].pipeline_layout),
             0,
-            { *(m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]) });
+            { *(m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]) },
+            &dynamic_offsets);
 
         DrawModel(cmd);
 
         cmd->CmdEndRenderPass();
     }
     IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kSceneRenderTarget);
+
+    auto scaled_copy_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_internal_to_target_scaled_copy_constants);
+    auto image_delta_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_image_delta_options_constants);
 
     // Run delta visualizer
     cmd->CmdTransitionImageLayout(m_target_texture,
@@ -155,10 +155,13 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
     cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::InternalTargetImageDelta].compute_pipeline);
+
+    std::vector<uint32_t> dynamic_offsets = { scaled_copy_dynamic_offset, image_delta_dynamic_offset };
     cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE,
         *(m_generated_shader_states[AppShaderList::InternalTargetImageDelta].pipeline_layout),
         0,
-        { *(m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]) });
+        { *(m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]) },
+        &dynamic_offsets);
 
     vkex::uint3 dispatchDims = CalculateSimpleDispatchDimensions(
         m_generated_shader_states[AppShaderList::InternalTargetImageDelta],

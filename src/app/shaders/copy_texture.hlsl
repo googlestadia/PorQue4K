@@ -14,12 +14,9 @@
  limitations under the License.
 */
 
-struct TexDimData {
-    uint srcWidth, srcHeight;
-    uint dstWidth, dstHeight;
-};
+#include "ConstantBufferStructs.h"
 
-ConstantBuffer<TexDimData> TexDims : register(b0);
+ConstantBuffer<ScaledTexCopyDimensionsData> TexDims : register(b0);
 
 Texture2D<float4> in_texture : register(t1);
 RWTexture2D<float4> out_texture : register(u2);

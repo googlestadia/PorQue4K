@@ -14,16 +14,9 @@
  limitations under the License.
 */
 
-struct TexDimData {
-    uint srcWidth, srcHeight;
-    uint dstWidth, dstHeight;
-};
+#include "ConstantBufferStructs.h"
 
-struct ImageDeltaOptions {
-    uint vizMode;
-};
-
-ConstantBuffer<TexDimData> TexDims : register(b0);
+ConstantBuffer<ScaledTexCopyDimensionsData> TexDims : register(b0);
 ConstantBuffer<ImageDeltaOptions> Options : register(b1);
 
 Texture2D<float4> internal_res_texture : register(t2);

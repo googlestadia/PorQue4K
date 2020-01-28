@@ -14,15 +14,9 @@
  limitations under the License.
 */
 
-#include "vkex/Application.h"
-
-#include "AssetUtil.h"
-
 #include "AppCore.h"
 
 // TODO: Simplify shader<->app interface management
-// * Move constant buffer structs to another file?
-//   * Possibly share structs with shaders?
 // * Shared header for stuff like TG dims
 
 void VkexInfoApp::AddArgs(vkex::ArgParser& args)
@@ -86,6 +80,11 @@ void VkexInfoApp::Setup()
         m_helmet_model.PopulateFromModel(helmet_path, GetGraphicsQueue());
     }
 
+    {
+        auto frame_count = GetConfiguration().frame_count;
+        m_per_frame_datas.resize(frame_count);
+    }
+
     // TODO: How we manage images will change with checkerboard...
     SetupImagesAndRenderPasses(GetPresentResolutionExtent(), GetConfiguration().swapchain.color_format, VK_FORMAT_D32_SFLOAT);
 
@@ -146,62 +145,10 @@ void VkexInfoApp::Setup()
         SetupShaders(shader_inputs, m_generated_shader_states);
     }
 
-
-    // TODO: I think we'll want to re-work how constant buffers and constant buffer descriptors
-    // are managed through frames. I think I'd prefer to allocate one BAR0 buffer per-frame,
-    // allocate chunks out of it, copy from CPU, and use dynamic offsets to manage the
-    // descriptor set updates
-
-    // Draw constants
+    // constant buffers
     {
-
-        m_simple_draw_constant_buffers.resize(GetConfiguration().frame_count);
-        for (auto& cb : m_simple_draw_constant_buffers) {
-            VKEX_CALL(asset_util::CreateConstantBuffer(
-                m_simple_draw_view_transform_constants.size,
-                nullptr,
-                GetGraphicsQueue(),
-                asset_util::MEMORY_USAGE_CPU_TO_GPU,
-                &cb));
-        }
-    }
-
-    // Compute copy/viz constant buffer creation
-    {
-        m_internal_to_target_scaled_copy_constant_buffers.resize(GetConfiguration().frame_count);
-
-        for (auto& cb : m_internal_to_target_scaled_copy_constant_buffers) {
-            VKEX_CALL(asset_util::CreateConstantBuffer(
-                m_internal_to_target_scaled_copy_constants.size,
-                nullptr,
-                GetGraphicsQueue(),
-                asset_util::MEMORY_USAGE_CPU_TO_GPU,
-                &cb));
-        }
-    }
-    {
-        m_target_to_present_scaled_copy_constant_buffers.resize(GetConfiguration().frame_count);
-
-        for (auto& cb : m_target_to_present_scaled_copy_constant_buffers) {
-            VKEX_CALL(asset_util::CreateConstantBuffer(
-                m_target_to_present_scaled_copy_constants.size,
-                nullptr,
-                GetGraphicsQueue(),
-                asset_util::MEMORY_USAGE_CPU_TO_GPU,
-                &cb));
-        }
-    }
-    {
-        m_image_delta_options_constant_buffers.resize(GetConfiguration().frame_count);
-
-        for (auto& cb : m_image_delta_options_constant_buffers) {
-            VKEX_CALL(asset_util::CreateConstantBuffer(
-                m_image_delta_options_constants.size,
-                nullptr,
-                GetGraphicsQueue(),
-                asset_util::MEMORY_USAGE_CPU_TO_GPU,
-                &cb));
-        }
+        auto frame_count = GetConfiguration().frame_count;
+        m_constant_buffer_manager.Initialize(GetDevice(), GetGraphicsQueue(), frame_count);
     }
 
     // Scene rendering descriptors
@@ -214,7 +161,11 @@ void VkexInfoApp::Setup()
 
         auto frame_count = GetConfiguration().frame_count;
         for (uint32_t frame_index = 0; frame_index < frame_count; frame_index++) {
-            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(0, m_simple_draw_constant_buffers[frame_index]);
+            auto& per_frame_data = m_per_frame_datas[frame_index];
+
+            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(0, 
+                m_constant_buffer_manager.GetBuffer(frame_index),
+                m_simple_draw_view_transform_constants.size);
 
             // TODO: If models are switching, these updates will have to be per-frame
             m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(1, helmet_samplers[matComponent]);
@@ -229,19 +180,28 @@ void VkexInfoApp::Setup()
 
         auto frame_count = GetConfiguration().frame_count;
         for (uint32_t frame_index = 0; frame_index < frame_count; frame_index++) {
-            m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(0, m_internal_to_target_scaled_copy_constant_buffers[frame_index]);
+            auto& per_frame_data = m_per_frame_datas[frame_index];
+            auto constant_buffer = m_constant_buffer_manager.GetBuffer(frame_index);
+
+            m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(0,
+                constant_buffer,
+                m_internal_to_target_scaled_copy_constants.size);
             m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(1, m_internal_draw_simple_render_pass.rtv_texture);
             m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(2, m_target_texture);
 
-            // TODO: I can re-use constant buffers, but should probably rename for clarity
-            // TODO: Simplify this constant buffer because all images are the same size?
-            m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(0, m_internal_to_target_scaled_copy_constant_buffers[frame_index]);
-            m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(1, m_image_delta_options_constant_buffers[frame_index]);
+            m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(0,
+                constant_buffer,
+                m_internal_to_target_scaled_copy_constants.size);
+            m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(1,
+                constant_buffer,
+                m_image_delta_options_constants.size);
             m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(2, m_target_texture);
             m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(3, m_internal_as_target_draw_simple_render_pass.rtv_texture);
             m_generated_shader_states[AppShaderList::InternalTargetImageDelta].descriptor_sets[frame_index]->UpdateDescriptor(4, m_visualization_texture);
 
-            m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(0, m_target_to_present_scaled_copy_constant_buffers[frame_index]);
+            m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(0,
+                constant_buffer,
+                m_target_to_present_scaled_copy_constants.size);
             m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(1, m_visualization_texture);
         }
     }
@@ -249,7 +209,6 @@ void VkexInfoApp::Setup()
     // Timer setup
     {
         auto frame_count = GetConfiguration().frame_count;
-        m_per_frame_datas.resize(frame_count);
 
         for (uint32_t frame_index = 0; frame_index < frame_count; frame_index++) {
             auto& per_frame_data = m_per_frame_datas[frame_index];
@@ -272,6 +231,9 @@ void VkexInfoApp::Setup()
 
 void VkexInfoApp::Update(double frame_elapsed_time)
 {
+    // TODO: Make this an update of CPU logic structures, not necessarily matching graphics stuff
+    // Then do the graphics-based structure conversion at constant buffer update time
+
     // Almost entirely doing CPU-side updates of constant buffers
 
     float3 eye = float3(0, 0, 2);
@@ -320,6 +282,8 @@ void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
 {
     const auto frame_index = p_data->GetFrameIndex();
 
+    m_constant_buffer_manager.NewFrame(frame_index);
+
     ReadbackGpuTimestamps(frame_index);
 
     RenderInternalAndTarget(p_data->GetCommandBuffer(), frame_index);
@@ -329,8 +293,6 @@ void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
 
 void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
 {
-    // TODO: Maybe move the bulk of this to AppRender.cpp?
-
     // TODO: Continue progress for multi-frame overlap by allowing multiple Presents to be in flight.
     // Currently, multiple RenderDatas in flight is implemented, but synchronized to a single PresentData
     // for now. Basically, this means pushing m_frame_fence into PresentData, and re-factoring how
@@ -343,13 +305,9 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
     auto swapchain_image = present_render_pass->GetRtvs()[0]->GetResource()->GetImage();
 
     const auto frame_index = p_data->GetFrameIndex();
+    auto& per_frame_data = m_per_frame_datas[frame_index];
 
-    {
-        auto& scaled_tex_copy_cb = m_target_to_present_scaled_copy_constant_buffers[frame_index];
-        VKEX_CALL(scaled_tex_copy_cb->Copy(
-            m_target_to_present_scaled_copy_constants.size,
-            &m_target_to_present_scaled_copy_constants.data));
-    }
+    uint32_t scaled_constants_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_target_to_present_scaled_copy_constants);
 
     {
         VkDescriptorImageInfo info = {};
@@ -379,10 +337,13 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
         cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].compute_pipeline);
+
+        std::vector<uint32_t> dynamic_offsets = { scaled_constants_dynamic_offset };
         cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE,
             *(m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].pipeline_layout),
             0,
-            { *(m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]) });
+            { *(m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]) },
+            &dynamic_offsets);
         
         vkex::uint3 dispatchDims = CalculateSimpleDispatchDimensions(
             m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy],

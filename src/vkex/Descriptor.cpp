@@ -194,6 +194,36 @@ vkex::Result CDescriptorSet::UpdateDescriptor(uint32_t binding, const vkex::Buff
   return vkex::Result::Success;
 }
 
+vkex::Result CDescriptorSet::UpdateDescriptor(uint32_t binding, const vkex::Buffer buffer, VkDeviceSize dynamic_range, uint32_t array_element)
+{
+  const VkDescriptorSetLayoutBinding* p_descriptor_binding = FindDescriptorBinding(binding);
+  if (p_descriptor_binding == nullptr) {
+    return vkex::Result::ErrorInvalidDescriptorBinding;
+  }
+
+  VkDescriptorType descriptor_type = p_descriptor_binding->descriptorType;
+  bool is_dynamic_uniform_buffer = (descriptor_type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
+
+  if (!is_dynamic_uniform_buffer)  {
+    return vkex::Result::ErrorInvalidDescriptorType;
+  }
+
+  VkDescriptorBufferInfo info  {};
+  info.buffer = *buffer;
+  info.offset = 0;
+  info.range  = dynamic_range;
+
+  const uint32_t count = 1;
+  UpdateDescriptors(
+    binding,
+    descriptor_type,
+    array_element,
+    count,
+    &info);
+
+  return vkex::Result::Success;
+}
+
 vkex::Result CDescriptorSet::UpdateDescriptor(uint32_t binding, const vkex::Texture texture, uint32_t array_element)
 {
   const VkDescriptorSetLayoutBinding* p_descriptor_binding = FindDescriptorBinding(binding);

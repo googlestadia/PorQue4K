@@ -26,6 +26,8 @@ set(TINYGLTF_INC_DIR	      ${CMAKE_SOURCE_DIR}/third_party/tinygltf)
 list(APPEND HDR_FILES
     ${SRC_DIR}/AppCore.h
     ${SRC_DIR}/AssetUtil.h
+    ${SRC_DIR}/ConstantBufferManager.h
+    ${SRC_DIR}/ConstantBufferStructs.h
     ${SRC_DIR}/GLTFModel.h
     ${SRC_DIR}/SimpleRenderPass.h
 )
@@ -36,6 +38,7 @@ list(APPEND SRC_FILES
     ${SRC_DIR}/AppRender.cpp
     ${SRC_DIR}/AppSetup.cpp
     ${SRC_DIR}/AssetUtil.cpp
+    ${SRC_DIR}/ConstantBufferManager.cpp
     ${SRC_DIR}/GLTFModel.cpp
     ${SRC_DIR}/SimpleRenderPass.cpp
 )

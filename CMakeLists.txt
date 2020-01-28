@@ -101,11 +101,12 @@ function(compile_hlsl_vs_ps hlsl_path output_dir working_dir)
   get_filename_component(ps_file ${ps_file} NAME)
   set(vs_file ${output_dir}/${vs_file})
   set(ps_file ${output_dir}/${ps_file})
+  file(TO_NATIVE_PATH ${working_dir} INCLUDE_PATH)
   #message("${vs_file} ${ps_file}")
   add_custom_command(
-    COMMAND ${DXC_PATH} -T vs_6_0 -spirv -E vsmain -Fo ${vs_file} ${hlsl_path}
+    COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -T vs_6_0 -spirv -E vsmain -Fo ${vs_file} ${hlsl_path}
     COMMAND ${CMAKE_COMMAND} -E echo "Compiling VS ${hlsl_path} to ${vs_file}"
-    COMMAND ${DXC_PATH} -T ps_6_0 -spirv -E psmain -Fo ${ps_file} ${hlsl_path}
+    COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -T ps_6_0 -spirv -E psmain -Fo ${ps_file} ${hlsl_path}
     COMMAND ${CMAKE_COMMAND} -E echo "Compiling PS ${hlsl_path} to ${ps_file}"
     MAIN_DEPENDENCY ${hlsl_path}
     OUTPUT ${vs_file} ${ps_file}
@@ -118,9 +119,10 @@ function(compile_hlsl_cs hlsl_path output_dir working_dir)
   string(REPLACE "hlsl" "cs.spv" cs_file ${hlsl_path})
   get_filename_component(cs_file ${cs_file} NAME)
   set(cs_file ${output_dir}/${cs_file})
+  file(TO_NATIVE_PATH ${working_dir} INCLUDE_PATH)
   #message("${vs_file} ${ps_file}")
   add_custom_command(
-    COMMAND ${DXC_PATH} -T cs_6_0 -spirv -E csmain -Fo ${cs_file} ${hlsl_path}
+    COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -T cs_6_0 -spirv -E csmain -Fo ${cs_file} ${hlsl_path}
     COMMAND ${CMAKE_COMMAND} -E echo "Compiling VS ${hlsl_path} to ${cs_file}"
     MAIN_DEPENDENCY ${hlsl_path}
     OUTPUT ${cs_file}

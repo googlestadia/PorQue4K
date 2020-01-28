@@ -139,6 +139,11 @@ public:
   /** @fn UpdateDescriptor
    *
    */
+  vkex::Result UpdateDescriptor(uint32_t binding, const vkex::Buffer buffer, VkDeviceSize dynamic_range, uint32_t array_element = 0);
+
+  /** @fn UpdateDescriptor
+   *
+   */
   vkex::Result UpdateDescriptor(uint32_t binding, const vkex::Texture texture, uint32_t array_element = 0);
 
   /** @fn UpdateDescriptor

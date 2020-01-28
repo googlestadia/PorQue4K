@@ -84,6 +84,15 @@ void VkexInfoApp::SetupImagesAndRenderPasses(const VkExtent2D present_extent,
     }
 }
 
+void ConfigureDynamicUbos(vkex::DescriptorSetLayoutCreateInfo& create_info)
+{
+    for (auto& binding : create_info.bindings) {
+        if (binding.descriptorType == VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
+            binding.descriptorType = VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        }
+    }
+}
+
 void VkexInfoApp::SetupShaders(const std::vector<ShaderProgramInputs>& shader_inputs,
     std::vector<GeneratedShaderState>& generated_shader_states)
 {
@@ -97,7 +106,7 @@ void VkexInfoApp::SetupShaders(const std::vector<ShaderProgramInputs>& shader_in
         {
             gen_shader_state.pipeline_type = shader_input.pipeline_type;
 
-            // TODO: Check shader path length?
+            // TODO: Check shader_paths length?
             if (gen_shader_state.pipeline_type == ShaderPipelineType::Compute) {
                 VKEX_CALL(asset_util::CreateShaderProgramCompute(
                     GetDevice(),
@@ -116,6 +125,7 @@ void VkexInfoApp::SetupShaders(const std::vector<ShaderProgramInputs>& shader_in
         {
             const vkex::ShaderInterface& shader_interface = gen_shader_state.program->GetInterface();
             vkex::DescriptorSetLayoutCreateInfo create_info = ToVkexCreateInfo(shader_interface.GetSet(0));
+            ConfigureDynamicUbos(create_info);
             VKEX_CALL(GetDevice()->CreateDescriptorSetLayout(create_info, &gen_shader_state.descriptor_set_layout));
 
             descriptor_pool_create_info.pool_sizes += shader_interface.GetDescriptorPoolSizes();
