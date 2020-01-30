@@ -55,20 +55,22 @@ $ sh setup_ggp_ninja.sh <path to DXC binary>
 ```
 
 ### Build GGP + Visual Studio
-Right now, it's not entirely clear how to use CMake to directly generate a GGP-compatible
-Visual Studio solution. However, we can get pretty close, and fix up the last deltas with
-a custom script. Obviously, this is fragile, but it works ok for now.
+Using a special fork of CMake, we're able to generate GGP-enabled Visual Studio 2017 solution + project files.
+You can clone the https://github.com/chaoticbob/CMake repo, or grab a [pre-built release](https://github.com/chaoticbob/CMake/releases/tag/cmake-ggp-6115824).
 
+Once you have it, you can use this command line:
+```
+$ cmake -G "Visual Studio 15 2017" -T "Ggp_Clang" -A "GGP" -DCMAKE_TOOLCHAIN_FILE="$GGP_SDK_PATH/cmake/ggp.cmake" -DDXC_PATH="C:\src\sc\dxc\9c89a1c2\bin\dxc.exe" ..
+```
+You can use a batch script to automate this process:
 `setup_ggp_vs.bat`
 ```
-$ mkdir buildGGPVS
-$ cd buildGGPVS
-$ cmake -G "Visual Studio 15 Win64" -DDXC_PATH="C:\src\sc\dxc\fdd4e3b0\bin\dxc.exe" .. -DCMAKE_TOOLCHAIN_FILE="$GGP_SDK_PATH/cmake/ggp.cmake"
-$ python3 ../ggpvs_conversion.py3 .
+> mkdir buildGGPVS
+> cd buildGGPVS
+> cmake -G "Visual Studio 15 2017" -T "Ggp_Clang" -A "GGP" -DCMAKE_TOOLCHAIN_FILE="%GGP_SDK_PATH%/cmake/ggp.cmake" -DDXC_PATH="C:\src\sc\dxc\9c89a1c2\bin\dxc.exe" ..
 ```
 
-Then open `buildGGPVS/VulkanPorQue4K.sln` with Visual Studio 2017. Building should work, though
-getting the debugging working is still TBD (not deploying binary correctly yet). 
+Then open `buildGGPVS/VulkanPorQue4K.sln` with Visual Studio 2017. Building and debugging should work (once you set the Application in the Debug properties).
 
 ## Build for Linux
 TBD - Help!

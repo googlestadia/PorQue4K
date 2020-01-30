@@ -138,7 +138,7 @@ set_target_properties(${PROJECT_NAME}
   PROPERTIES FOLDER vkex
 )
 
-if(WIN32 AND NOT GGP_VS)
+if(WIN32)
   target_compile_definitions(${PROJECT_NAME}
     PUBLIC VKEX_WIN32
 	       _CRT_SECURE_NO_WARNINGS

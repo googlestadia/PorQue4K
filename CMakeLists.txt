@@ -26,27 +26,27 @@ set(CMAKE_SUPPRESS_REGENERATION true)
 # We don't need all configs...
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
 
-set(CMAKE_CXX_STANDARD 14)
+# We can't use CXX_STANDARD here because in the GGP + VS usage,
+# an invalid CppLanguageStandard token is generated. Using CXX_FLAGS
+# seems to work, and relatively well-known workaround
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14") 
 
 if(DEFINED GGP_TOOLCHAIN_PATH)
   set(GGP TRUE)
 endif()
 
-if (MSVC AND GGP)
-  # This is a spoof'd build target that needs a post-process
-  # script to get the VS project into a working condition
+if ((${CMAKE_GENERATOR} STREQUAL "Visual Studio 15 2017") AND GGP)
   set(GGP_VS TRUE)
   message(STATUS "Generating VS files with GGP support")
 endif()
 
-if(MSVC AND NOT GGP_VS)
+if(MSVC)
     set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} /MP")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
 endif()
 
 # TODO: Can we ever use find_package(vulkan) to handle this?
 # Couldn't get this working on Windows, so gave up...
-# TODO: Key this on the Vulkan SDK in GGP SDK when it's time
 set(VULKAN_DIR_FOUND FALSE)
 if (NOT VULKAN_DIR)
     set(VULKAN_DIR $ENV{VULKAN_SDK})
@@ -56,13 +56,13 @@ if (NOT "${VULKAN_DIR}" STREQUAL "")
     set(VULKAN_DIR_FOUND TRUE)
 endif()
 
-if ((WIN32 OR UNIX) AND NOT GGP_VS)
+if ((WIN32 OR UNIX))
     if (NOT VULKAN_DIR_FOUND)
         message( FATAL_ERROR "Vulkan SDK could not be located" )
     endif()
 endif()
 
-if(WIN32 AND NOT GGP_VS)
+if(WIN32)
     set(VULKAN_INCLUDE_DIR  ${VULKAN_DIR}/include)
     set(VULKAN_LIBRARY  ${VULKAN_DIR}/lib/vulkan-1.lib)
 elseif(GGP)
