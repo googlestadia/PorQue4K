@@ -1,11 +1,12 @@
 #!/bin/sh
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 SRC_DIR=${SCRIPT_DIR}
-SPV_DIR=${SCRIPT_DIR}/../../assets/shaders
+SPV_DIR=${SCRIPT_DIR}/../../../assets/shaders
 
 SELF_INC_DIR=${SCRIPT_DIR}
 SELF_INC_DIR=$(realpath --relative-to=${SCRIPT_DIR} ${SELF_INC_DIR})
 VKEX_INC_DIR=$(realpath --relative-to=${SCRIPT_DIR} ${SRC_DIR}/..)
+CAS_INC_DIR=$(realpath --relative-to=${SCRIPT_DIR} ${SRC_DIR}/../../../third_party/FidelityFX/FFX_CAS/ffx-cas-headers)
 
 echo ${VKEX_INC_DIR}
 
@@ -25,14 +26,14 @@ do
   eval ${cmd} 
 done
 
-HLSL_COMPUTE_FILES=(copy_texture.hlsl image_delta.hlsl)
+HLSL_COMPUTE_FILES=(cas.hlsl copy_texture.hlsl image_delta.hlsl)
 for src_file in "${HLSL_COMPUTE_FILES[@]}"
 do
   echo -e "\nCompiling ${src_file}"
   base_name=$(basename -s .hlsl ${src_file})
   hlsl_file=${SRC_DIR}/${src_file}
   cs_spv=${SPV_DIR}/${base_name}.cs.spv
-  cmd="dxc -spirv -T cs_6_0 -E csmain -fvk-use-dx-layout -Fo ${cs_spv} -I ${SELF_INC_DIR} -I ${VKEX_INC_DIR} ${hlsl_file}"
+  cmd="dxc -spirv -T cs_6_0 -E csmain -fvk-use-dx-layout -Fo ${cs_spv} -I ${SELF_INC_DIR} -I ${VKEX_INC_DIR} -I ${CAS_INC_DIR} ${hlsl_file}"
   echo ${cmd}
   eval ${cmd}
 done

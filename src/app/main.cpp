@@ -71,8 +71,9 @@ void VkexInfoApp::Configure(const vkex::ArgParser& args, vkex::Configuration& co
 void VkexInfoApp::Setup()
 {
     {
-        auto present_res_key = FindPresentResolutionKey(GetConfiguration().window.width);
-        SetPresentResolution(present_res_key);
+      auto present_res_key =
+          FindPresentResolutionKey(GetConfiguration().window.width);
+      SetPresentResolution(present_res_key);
     }
 
     {
@@ -83,6 +84,11 @@ void VkexInfoApp::Setup()
     {
         auto frame_count = GetConfiguration().frame_count;
         m_per_frame_datas.resize(frame_count);
+    }
+
+    {
+      m_selected_upscaling_technique_index = 0;
+      m_upscaling_technique_key = UpscalingTechniqueKey::None;
     }
 
     // TODO: How we manage images will change with checkerboard...
@@ -140,6 +146,14 @@ void VkexInfoApp::Setup()
 
             shader_inputs[AppShaderList::TargetToPresentScaledCopy].shader_paths.resize(1);
             shader_inputs[AppShaderList::TargetToPresentScaledCopy].shader_paths[0] = GetAssetPath("shaders/copy_texture.cs.spv");
+        }
+        {
+          shader_inputs[AppShaderList::UpscalingCAS].pipeline_type =
+              ShaderPipelineType::Compute;
+
+          shader_inputs[AppShaderList::UpscalingCAS].shader_paths.resize(1);
+          shader_inputs[AppShaderList::UpscalingCAS].shader_paths[0] =
+              GetAssetPath("shaders/cas.cs.spv");
         }
 
         SetupShaders(shader_inputs, m_generated_shader_states);
@@ -203,6 +217,18 @@ void VkexInfoApp::Setup()
                 constant_buffer,
                 m_target_to_present_scaled_copy_constants.size);
             m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]->UpdateDescriptor(1, m_visualization_texture);
+
+            m_generated_shader_states[AppShaderList::UpscalingCAS]
+                .descriptor_sets[frame_index]
+                ->UpdateDescriptor(0, constant_buffer,
+                                   m_cas_upscaling_constants.size);
+            m_generated_shader_states[AppShaderList::UpscalingCAS]
+                .descriptor_sets[frame_index]
+                ->UpdateDescriptor(
+                    1, m_internal_draw_simple_render_pass.rtv_texture);
+            m_generated_shader_states[AppShaderList::UpscalingCAS]
+                .descriptor_sets[frame_index]
+                ->UpdateDescriptor(2, m_target_texture);
         }
     }
 
@@ -251,6 +277,7 @@ void VkexInfoApp::Update(double frame_elapsed_time)
 
     UpdateTargetResolutionState();
     UpdateInternalResolutionState();
+    UpdateUpscalingTechniqueState();
 
     auto internal_res_extent = GetInternalResolutionExtent();
     auto target_res_extent = GetTargetResolutionExtent();
@@ -273,6 +300,9 @@ void VkexInfoApp::Update(double frame_elapsed_time)
     m_target_to_present_scaled_copy_constants.data.srcHeight = target_res_extent.height;
     m_target_to_present_scaled_copy_constants.data.dstWidth = present_res_extent.width;
     m_target_to_present_scaled_copy_constants.data.dstHeight = present_res_extent.height;
+
+    UpdateCASConstants(internal_res_extent, target_res_extent, 1.0f,
+                       m_cas_upscaling_constants);
 
     VKEX_ASSERT(m_delta_visualizer_mode < DeltaVisualizerMode::kDeltaVizCount);
     m_image_delta_options_constants.data.vizMode = uint(m_delta_visualizer_mode);

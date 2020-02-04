@@ -21,6 +21,11 @@
 
 // TODO: Maybe move resolution tables to another file? To be included directly?
 
+struct UpscalingTechniqueInfo {
+  UpscalingTechniqueKey id;
+  std::string name;
+};
+
 struct ResolutionInfo {
     ResolutionInfoKey id;
     VkExtent2D resolution_extent;
@@ -37,6 +42,12 @@ struct PresentResolutionChain {
     PresentResolutionKey id;
     ResolutionInfoKey resolution_info_key;
     std::vector<TargetResolutionKey> target_resolution_keys;
+};
+
+static UpscalingTechniqueInfo
+    s_upscaling_techniques[UpscalingTechniqueKey::kuCount] = {
+        {UpscalingTechniqueKey::None, "None"},
+        {UpscalingTechniqueKey::CAS, "FidelityFX CAS"},
 };
 
 static ResolutionInfo s_resolution_infos[ResolutionInfoKey::krCount] = {
@@ -120,6 +131,19 @@ void VkexInfoApp::UpdateInternalResolutionState()
     m_internal_resolution_key = s_target_resolutions[m_target_resolution_key].internal_resolution_info_keys[m_selected_internal_resolution_index];
 }
 
+void VkexInfoApp::UpdateUpscalingTechniqueState() {
+  m_upscaling_technique_key =
+      s_upscaling_techniques[m_selected_upscaling_technique_index].id;
+}
+
+UpscalingTechniqueKey VkexInfoApp::GetUpscalingTechnique() {
+  return m_upscaling_technique_key;
+}
+
+const char *VkexInfoApp::GetUpscalingTechniqueText() {
+  return s_upscaling_techniques[m_upscaling_technique_key].name.c_str();
+}
+
 VkExtent2D VkexInfoApp::GetInternalResolutionExtent()
 {
     return s_resolution_infos[m_internal_resolution_key].resolution_extent;
@@ -147,6 +171,13 @@ const char * VkexInfoApp::GetPresentResolutionText()
 {
     auto res_info_key = s_present_resolutions[m_present_resolution_key].resolution_info_key;
     return s_resolution_infos[res_info_key].text.c_str();
+}
+
+void VkexInfoApp::BuildUpscalingTechniqueList(
+    std::vector<const char *> &upscaling_technique_list) {
+  for (const auto &technique : s_upscaling_techniques) {
+    upscaling_technique_list.push_back(technique.name.c_str());
+  }
 }
 
 void VkexInfoApp::BuildInternalResolutionTextList(std::vector<const char*>& internal_text_list)
@@ -303,6 +334,18 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index)
             //          Upscaled
             //          Delta visualizers...
             ImGui::Columns(2);
+            {
+              std::vector<const char *> upscaling_techniques;
+              BuildUpscalingTechniqueList(upscaling_techniques);
+
+              ImGui::Text("Upscaling technique");
+              ImGui::NextColumn();
+              ImGui::Combo("##UpscalingTech",
+                           (int *)(&m_selected_upscaling_technique_index),
+                           upscaling_techniques.data(),
+                           int(upscaling_techniques.size()));
+              ImGui::NextColumn();
+            }
             {
                 std::vector<const char*> resolution_items;
                 BuildInternalResolutionTextList(resolution_items);

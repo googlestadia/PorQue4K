@@ -23,7 +23,7 @@ Current verified DXC commit is [9c89a1c2](https://github.com/microsoft/DirectXSh
 
 * Find how shaders are compiled into pipelines by looking at `VkexInfoApp::SetupShaders`
 * Add a toggle to the GUI via `VkexInfoApp::DrawAppInfoGUI`
-* Execute your pipeline by adding it to `VkexInfoApp::ProcessInternalToTarget`
+* Execute your pipeline by adding it to `VkexInfoApp::UpscaleInternalToTarget`
 * Allocate + update constant buffers and update descriptor sets
 
 ### Add Documentation

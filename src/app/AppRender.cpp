@@ -75,31 +75,69 @@ void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t fram
 {
     auto& per_frame_data = m_per_frame_datas[frame_index];
 
-    auto scaled_copy_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_internal_to_target_scaled_copy_constants);
-
     cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-    cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].compute_pipeline);
+    switch (GetUpscalingTechnique()) {
+    case None: {
+      auto scaled_copy_dynamic_offset =
+          m_constant_buffer_manager.UploadConstantsToDynamicBuffer(
+              m_internal_to_target_scaled_copy_constants);
+      cmd->CmdBindPipeline(
+          m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy]
+              .compute_pipeline);
+      std::vector<uint32_t> dynamic_offsets = {scaled_copy_dynamic_offset};
+      cmd->CmdBindDescriptorSets(
+          VK_PIPELINE_BIND_POINT_COMPUTE,
+          *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy]
+                .pipeline_layout),
+          0, {*(m_generated_shader_states
+                    [AppShaderList::InternalToTargetScaledCopy]
+                        .descriptor_sets[frame_index])},
+          &dynamic_offsets);
 
-    std::vector<uint32_t> dynamic_offsets = { scaled_copy_dynamic_offset };
-    cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE,
-        *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].pipeline_layout),
-        0,
-        { *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].descriptor_sets[frame_index]) },
-        &dynamic_offsets);
-
-    IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kUpscaleInternal);
-    {
+      IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kUpscaleInternal);
+      {
         vkex::uint3 dispatchDims = CalculateSimpleDispatchDimensions(
-            m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy],
+            m_generated_shader_states
+                [AppShaderList::InternalToTargetScaledCopy],
             GetTargetResolutionExtent());
         cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
+      }
+      IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kUpscaleInternal);
+      break;
     }
-    IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kUpscaleInternal);
+    case CAS: {
+      auto cas_dynamic_offset =
+          m_constant_buffer_manager.UploadConstantsToDynamicBuffer(
+              m_cas_upscaling_constants);
+      cmd->CmdBindPipeline(
+          m_generated_shader_states[AppShaderList::UpscalingCAS]
+              .compute_pipeline);
+      std::vector<uint32_t> dynamic_offsets = {cas_dynamic_offset};
+      cmd->CmdBindDescriptorSets(
+          VK_PIPELINE_BIND_POINT_COMPUTE,
+          *(m_generated_shader_states[AppShaderList::UpscalingCAS]
+                .pipeline_layout),
+          0, {*(m_generated_shader_states[AppShaderList::UpscalingCAS]
+                    .descriptor_sets[frame_index])},
+          &dynamic_offsets);
 
+      IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kUpscaleInternal);
+      {
+        VkExtent2D extent = GetTargetResolutionExtent();
+        cmd->CmdDispatch((extent.width + 15) >> 4, (extent.height + 15) >> 4,
+                         1);
+      }
+      IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kUpscaleInternal);
+      break;
+    }
+    default:
+      break;
+      // ERROR: unrecognized technique
+    }
     cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -143,6 +181,9 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t
 
     auto scaled_copy_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_internal_to_target_scaled_copy_constants);
     auto image_delta_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_image_delta_options_constants);
+    auto cas_dynamic_offset =
+        m_constant_buffer_manager.UploadConstantsToDynamicBuffer(
+            m_cas_upscaling_constants);
 
     // Run delta visualizer
     cmd->CmdTransitionImageLayout(m_target_texture,

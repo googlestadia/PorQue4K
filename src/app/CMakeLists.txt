@@ -22,6 +22,7 @@ set(SRC_DIR      ${CMAKE_CURRENT_SOURCE_DIR})
 set(ASSETS_DIR   ${CMAKE_SOURCE_DIR}/assets)
 set(SHADERS_DIR  ${SRC_DIR}/shaders)
 set(TINYGLTF_INC_DIR	      ${CMAKE_SOURCE_DIR}/third_party/tinygltf)
+set(FIDELITYFX_INC_DIR ${CMAKE_SOURCE_DIR}/third_party/FidelityFX/FFX_CAS/ffx-cas-headers)
 
 list(APPEND HDR_FILES
     ${SRC_DIR}/AppCore.h
@@ -38,6 +39,7 @@ list(APPEND SRC_FILES
     ${SRC_DIR}/AppRender.cpp
     ${SRC_DIR}/AppSetup.cpp
     ${SRC_DIR}/AssetUtil.cpp
+    ${SRC_DIR}/CAS.cpp
     ${SRC_DIR}/ConstantBufferManager.cpp
     ${SRC_DIR}/GLTFModel.cpp
     ${SRC_DIR}/SimpleRenderPass.cpp
@@ -49,6 +51,7 @@ list(APPEND VSPS_SHADER_FILES
 )
 
 list(APPEND CS_SHADER_FILES
+  ${SHADERS_DIR}/cas.hlsl
   ${SHADERS_DIR}/copy_texture.hlsl
   ${SHADERS_DIR}/image_delta.hlsl
 )
@@ -78,6 +81,7 @@ add_executable(${PROJECT_NAME} ${HDR_FILES} ${SRC_FILES} ${VSPS_SHADER_FILES} ${
 target_include_directories(${PROJECT_NAME} 
   PRIVATE   ${SRC_DIR}
   PUBLIC    ${TINYGLTF_INC_DIR}
+            ${FIDELITYFX_INC_DIR}
             ${VULKAN_INCLUDE_DIR}
             ${VKEX_TOP_INC_DIR}
 )

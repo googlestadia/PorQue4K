@@ -20,3 +20,6 @@
 [submodule "third_party/tinygltf"]
 	path = third_party/tinygltf
 	url = https://github.com/syoyo/tinygltf
+[submodule "third_party/FidelityFX"]
+	path = third_party/FidelityFX
+	url = https://github.com/GPUOpen-Effects/FidelityFX.git

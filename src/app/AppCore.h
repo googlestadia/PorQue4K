@@ -29,6 +29,7 @@ using float4 = vkex::float4;
 using float2x2 = vkex::float2x2;
 using float3x3 = vkex::float3x3;
 using float4x4 = vkex::float4x4;
+using uint4 = vkex::uint4;
 
 using uint = vkex::uint;
 
@@ -38,6 +39,7 @@ using uint = vkex::uint;
 using ViewTransformConstants = vkex::ConstantBufferData<ViewTransformData>;
 using ScaledTexCopyDimsConstants = vkex::ConstantBufferData<ScaledTexCopyDimensionsData>;
 using ImageDeltaOptionsConstants = vkex::ConstantBufferData<ImageDeltaOptions>;
+using CASUpscalingConstants = vkex::ConstantBufferData<CASData>;
 
 enum ShaderPipelineType {
     Graphics = 0,
@@ -45,11 +47,12 @@ enum ShaderPipelineType {
 };
 
 enum AppShaderList {
-    Geometry = 0,
-    InternalToTargetScaledCopy = 1,
-    InternalTargetImageDelta = 2,
-    TargetToPresentScaledCopy = 3,
-    NumTypes,
+  Geometry = 0,
+  InternalToTargetScaledCopy = 1,
+  InternalTargetImageDelta = 2,
+  TargetToPresentScaledCopy = 3,
+  UpscalingCAS = 4,
+  NumTypes,
 };
 
 struct ShaderProgramInputs {
@@ -74,6 +77,12 @@ struct GeneratedShaderState {
 };
 
 // TODO: Rename these enums into something more sane...
+
+enum UpscalingTechniqueKey {
+  None = 0,
+  CAS = 1,
+  kuCount,
+};
 
 enum ResolutionInfoKey {
     kr540p = 0,
@@ -149,14 +158,19 @@ protected:
     PresentResolutionKey FindPresentResolutionKey(const uint32_t width);
     void UpdateInternalResolutionState();
     void UpdateTargetResolutionState();
+    void UpdateUpscalingTechniqueState();
     void SetPresentResolution(PresentResolutionKey new_present_resolution);
     VkExtent2D GetInternalResolutionExtent();
     VkExtent2D GetTargetResolutionExtent();
     VkExtent2D GetPresentResolutionExtent();
+    UpscalingTechniqueKey GetUpscalingTechnique();
 
+    const char *GetUpscalingTechniqueText();
     const char * GetTargetResolutionText();
     const char * GetPresentResolutionText();
 
+    void BuildUpscalingTechniqueList(
+        std::vector<const char *> &upscaling_technique_list);
     void BuildInternalResolutionTextList(std::vector<const char*>& internal_text_list);
     void BuildTargetResolutionTextList(std::vector<const char*>& target_text_list);
 
@@ -187,7 +201,12 @@ protected:
     void SetupShaders(const std::vector<ShaderProgramInputs>& shader_inputs,
                             std::vector<GeneratedShaderState>& generated_shader_states);
 
-private:
+    // CAS.cpp
+    void UpdateCASConstants(const VkExtent2D &srcExtent,
+                            const VkExtent2D &dstExtent, const float sharpness,
+                            CASUpscalingConstants &constants);
+
+  private:
     std::vector<GeneratedShaderState> m_generated_shader_states;
     vkex::DescriptorPool              m_shared_descriptor_pool = nullptr;
 
@@ -195,6 +214,7 @@ private:
     ScaledTexCopyDimsConstants  m_internal_to_target_scaled_copy_constants = {};
     ImageDeltaOptionsConstants  m_image_delta_options_constants = {};
     ScaledTexCopyDimsConstants  m_target_to_present_scaled_copy_constants = {};
+    CASUpscalingConstants m_cas_upscaling_constants = {};
 
     SimpleRenderPass            m_internal_draw_simple_render_pass = {};
     SimpleRenderPass            m_internal_as_target_draw_simple_render_pass = {};
@@ -203,9 +223,12 @@ private:
 
     // TODO: Handle dynamic resolution?
 
+    UpscalingTechniqueKey m_upscaling_technique_key =
+        UpscalingTechniqueKey::None;
     PresentResolutionKey             m_present_resolution_key = PresentResolutionKey::kpCount;
     TargetResolutionKey              m_target_resolution_key = TargetResolutionKey::ktCount;
     ResolutionInfoKey                m_internal_resolution_key = ResolutionInfoKey::krCount;
+    uint32_t m_selected_upscaling_technique_index = UINT32_MAX;
     uint32_t                         m_selected_internal_resolution_index = UINT32_MAX;
     uint32_t                         m_selected_target_resolution_index = UINT32_MAX;
 
