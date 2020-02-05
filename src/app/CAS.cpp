@@ -40,9 +40,4 @@ void VkexInfoApp::UpdateCASConstants(const VkExtent2D &srcExtent,
   constants.data.const1.g = const1[1];
   constants.data.const1.b = const1[2];
   constants.data.const1.a = const1[3];
-  constants.data.srcWidth = srcExtent.width;
-  constants.data.srcHeight = srcExtent.height;
-  constants.data.dstWidth = dstExtent.width;
-  constants.data.dstHeight = dstExtent.height;
-  constants.data.sharpness = sharpness;
 }

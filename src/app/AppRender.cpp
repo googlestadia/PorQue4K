@@ -81,7 +81,7 @@ void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t fram
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
     switch (GetUpscalingTechnique()) {
-    case None: {
+    case UpscalingTechniqueKey::None: {
       auto scaled_copy_dynamic_offset =
           m_constant_buffer_manager.UploadConstantsToDynamicBuffer(
               m_internal_to_target_scaled_copy_constants);
@@ -109,7 +109,7 @@ void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t fram
       IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kUpscaleInternal);
       break;
     }
-    case CAS: {
+    case UpscalingTechniqueKey::CAS: {
       auto cas_dynamic_offset =
           m_constant_buffer_manager.UploadConstantsToDynamicBuffer(
               m_cas_upscaling_constants);
@@ -181,9 +181,6 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t
 
     auto scaled_copy_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_internal_to_target_scaled_copy_constants);
     auto image_delta_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_image_delta_options_constants);
-    auto cas_dynamic_offset =
-        m_constant_buffer_manager.UploadConstantsToDynamicBuffer(
-            m_cas_upscaling_constants);
 
     // Run delta visualizer
     cmd->CmdTransitionImageLayout(m_target_texture,

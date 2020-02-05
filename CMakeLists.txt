@@ -114,15 +114,14 @@ function(compile_hlsl_vs_ps hlsl_path output_dir working_dir)
   )
 endfunction()
 
-function(compile_hlsl_cs hlsl_path output_dir working_dir)
+function(compile_hlsl_cs hlsl_path output_dir working_dir addl_incl_dir)
   #message("${hlsl_path}")
   string(REPLACE "hlsl" "cs.spv" cs_file ${hlsl_path})
   get_filename_component(cs_file ${cs_file} NAME)
   set(cs_file ${output_dir}/${cs_file})
   file(TO_NATIVE_PATH ${working_dir} INCLUDE_PATH)
-  #message("${vs_file} ${ps_file}")
   add_custom_command(
-    COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -T cs_6_0 -spirv -E csmain -Fo ${cs_file} ${hlsl_path}
+    COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -I ${addl_incl_dir} -T cs_6_0 -spirv -E csmain -Fo ${cs_file} ${hlsl_path}
     COMMAND ${CMAKE_COMMAND} -E echo "Compiling VS ${hlsl_path} to ${cs_file}"
     MAIN_DEPENDENCY ${hlsl_path}
     OUTPUT ${cs_file}

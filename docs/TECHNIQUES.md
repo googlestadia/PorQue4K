@@ -1,3 +1,3 @@
 # Techniques
 
-* [FidelityFX CAS](docs/CAS.md).
+* [FidelityFX CAS](CAS.md)

@@ -17,9 +17,6 @@ struct ImageDeltaOptions {
 struct CASData {
   uint4 const0;
   uint4 const1;
-  float sharpness;
-  uint srcWidth, srcHeight;
-  uint dstWidth, dstHeight;
 };
 
 #endif // __CONSTANT_BUFFER_STRUCTS_H__

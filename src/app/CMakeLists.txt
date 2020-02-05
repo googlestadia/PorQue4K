@@ -31,6 +31,8 @@ list(APPEND HDR_FILES
     ${SRC_DIR}/ConstantBufferStructs.h
     ${SRC_DIR}/GLTFModel.h
     ${SRC_DIR}/SimpleRenderPass.h
+    ${FIDELITYFX_INC_DIR}/ffx_a.h
+    ${FIDELITYFX_INC_DIR}/ffx_cas.h
 )
 
 list(APPEND SRC_FILES
@@ -65,11 +67,13 @@ source_group ("Shaders\\Cs" FILES
 )
 
 if (BUILD_SHADERS)
+  file (TO_NATIVE_PATH ${FIDELITYFX_INC_DIR} CAS_INC_DIR)
+  
   foreach(VSPS_SHADER_PATH ${VSPS_SHADER_FILES})
     compile_hlsl_vs_ps(${VSPS_SHADER_PATH} ${ASSETS_DIR}/shaders ${CMAKE_CURRENT_SOURCE_DIR})
   endforeach()
   foreach(CS_SHADER_PATH ${CS_SHADER_FILES})
-    compile_hlsl_cs(${CS_SHADER_PATH} ${ASSETS_DIR}/shaders ${CMAKE_CURRENT_SOURCE_DIR})
+    compile_hlsl_cs(${CS_SHADER_PATH} ${ASSETS_DIR}/shaders ${CMAKE_CURRENT_SOURCE_DIR} ${CAS_INC_DIR})
   endforeach()
 else()
   set_source_files_properties(${VSPS_SHADER_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
