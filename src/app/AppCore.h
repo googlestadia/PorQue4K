@@ -207,6 +207,9 @@ protected:
                             CASUpscalingConstants &constants);
 
   private:
+    bool                             m_animation_enabled = true;
+    float                            m_animation_progress = 0.0f;
+
     std::vector<GeneratedShaderState> m_generated_shader_states;
     vkex::DescriptorPool              m_shared_descriptor_pool = nullptr;
 
@@ -242,7 +245,7 @@ protected:
 
     ConstantBufferManager            m_constant_buffer_manager;
 
-    std::vector<PerFrameData> m_per_frame_datas;
+    std::vector<PerFrameData>        m_per_frame_datas;
 };
 
 #endif // __APP_CORE_H__

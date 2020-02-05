@@ -80,6 +80,10 @@ void VkexInfoApp::Setup()
         auto helmet_path = GetAssetPath("models/DamagedHelmet/glTF/DamagedHelmet.gltf");
         m_helmet_model.PopulateFromModel(helmet_path, GetGraphicsQueue());
     }
+    {
+        m_animation_enabled = true;
+        m_animation_progress = 0.0f;
+    }
 
     {
         auto frame_count = GetConfiguration().frame_count;
@@ -268,8 +272,13 @@ void VkexInfoApp::Update(double frame_elapsed_time)
     float aspect = GetWindowAspect();
     vkex::PerspCamera camera(eye, center, up, 60.0f, aspect);
 
-    float t = GetFrameStartTime();
-    float4x4 M = glm::translate(float3(0, 0, 0)) * glm::rotate(t / 2.0f, float3(0, 1, 0)) * glm::rotate(t / 4.0f, float3(1, 0, 0));
+    if (m_animation_enabled) {
+        // TODO: Make the rate configurable?
+        m_animation_progress += 1 / 120.f;
+    }
+    float4x4 M = glm::translate(float3(0, 0, 0)) * 
+                 glm::rotate(m_animation_progress / 2.0f, float3(0, 1, 0)) * 
+                 glm::rotate(m_animation_progress / 4.0f, float3(1, 0, 0));
     float4x4 V = camera.GetViewMatrix();
     float4x4 P = camera.GetProjectionMatrix();
 

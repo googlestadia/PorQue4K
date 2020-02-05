@@ -326,6 +326,19 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index)
         
         ImGui::Separator();
 
+        {
+            ImGui::Columns(2);
+            {
+                ImGui::Text("Animation");
+                ImGui::NextColumn();
+                ImGui::Checkbox("##AnimationEnabled", &m_animation_enabled);
+                ImGui::NextColumn();
+            }
+            ImGui::Columns(1);
+        }
+
+        ImGui::Separator();
+
         // Upscale info
         {
             // TODO: Upscale selector
