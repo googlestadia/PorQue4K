@@ -56,7 +56,9 @@ if (NOT "${VULKAN_DIR}" STREQUAL "")
     set(VULKAN_DIR_FOUND TRUE)
 endif()
 
-if ((WIN32 OR UNIX))
+# Compiling with GGP doesn't require the VULKAN_SDK environment variable,
+# because the GGP SDK includes the headers and libraries that we need.
+if (NOT GGP)
     if (NOT VULKAN_DIR_FOUND)
         message( FATAL_ERROR "Vulkan SDK could not be located" )
     endif()

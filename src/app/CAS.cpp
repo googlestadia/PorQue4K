@@ -14,6 +14,7 @@
  limitations under the License.
 */
 
+#include <cstdlib>
 #include <cmath>
 #include <stdint.h>
 #define A_CPU 1
