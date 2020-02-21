@@ -1,12 +1,12 @@
 /*
  Copyright 2019-2020 Google Inc.
- 
+
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
  You may obtain a copy of the License at
- 
+
  http://www.apache.org/licenses/LICENSE-2.0
- 
+
  Unless required by applicable law or agreed to in writing, software
  distributed under the License is distributed on an "AS IS" BASIS,
  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -71,18 +71,25 @@ void VkexInfoApp::Configure(const vkex::ArgParser& args, vkex::Configuration& co
 void VkexInfoApp::Setup()
 {
     {
-      auto present_res_key =
-          FindPresentResolutionKey(GetConfiguration().window.width);
-      SetPresentResolution(present_res_key);
+        auto present_res_key =
+            FindPresentResolutionKey(GetConfiguration().window.width);
+        SetPresentResolution(present_res_key);
     }
 
     {
         auto helmet_path = GetAssetPath("models/DamagedHelmet/glTF/DamagedHelmet.gltf");
         m_helmet_model.PopulateFromModel(helmet_path, GetGraphicsQueue());
     }
+
+    // Render state managed from CPU side
     {
         m_animation_enabled = true;
         m_animation_progress = 0.0f;
+        m_light_infos.resize(1); // TODO: Support more than one light?
+        m_light_infos[0].lightType = LightType::kDirectional;
+        m_light_infos[0].direction = float3(0.f, 0.f, 1.f);
+        m_light_infos[0].color = float3(1.0f, 1.0f, 1.0f);
+        m_light_infos[0].intensity = 10.f;
     }
 
     {
@@ -91,8 +98,8 @@ void VkexInfoApp::Setup()
     }
 
     {
-      m_selected_upscaling_technique_index = 0;
-      m_upscaling_technique_key = UpscalingTechniqueKey::None;
+        m_selected_upscaling_technique_index = 0;
+        m_upscaling_technique_key = UpscalingTechniqueKey::None;
     }
 
     // TODO: How we manage images will change with checkerboard...
@@ -102,6 +109,9 @@ void VkexInfoApp::Setup()
     {
         // TODO: Move this shader/pipeline generation into another file where it's
         // simple + isolated to add in new shaders and related info
+
+        // TODO: Material shaders probably have to be compiled separately to handle the different
+        // possible combinations via specialization constants
 
         std::vector<ShaderProgramInputs> shader_inputs(AppShaderList::NumTypes);
 
@@ -152,12 +162,12 @@ void VkexInfoApp::Setup()
             shader_inputs[AppShaderList::TargetToPresentScaledCopy].shader_paths[0] = GetAssetPath("shaders/copy_texture.cs.spv");
         }
         {
-          shader_inputs[AppShaderList::UpscalingCAS].pipeline_type =
-              ShaderPipelineType::Compute;
+            shader_inputs[AppShaderList::UpscalingCAS].pipeline_type =
+                ShaderPipelineType::Compute;
 
-          shader_inputs[AppShaderList::UpscalingCAS].shader_paths.resize(1);
-          shader_inputs[AppShaderList::UpscalingCAS].shader_paths[0] =
-              GetAssetPath("shaders/cas.cs.spv");
+            shader_inputs[AppShaderList::UpscalingCAS].shader_paths.resize(1);
+            shader_inputs[AppShaderList::UpscalingCAS].shader_paths[0] =
+                GetAssetPath("shaders/cas.cs.spv");
         }
 
         SetupShaders(shader_inputs, m_generated_shader_states);
@@ -175,19 +185,29 @@ void VkexInfoApp::Setup()
 
         auto& helmet_samplers = m_helmet_model.GetMaterialSamplers(0, 0);
         auto& helmet_textures = m_helmet_model.GetMaterialTextures(0, 0);
-        auto matComponent = GLTFModel::MaterialComponentType::BaseColor;
+        // TODO: Don't hard code this...
+        auto matComponent = GLTFModel::MaterialTextureType::BaseColor;
 
         auto frame_count = GetConfiguration().frame_count;
         for (uint32_t frame_index = 0; frame_index < frame_count; frame_index++) {
             auto& per_frame_data = m_per_frame_datas[frame_index];
 
-            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(0, 
+            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(0,
                 m_constant_buffer_manager.GetBuffer(frame_index),
-                m_simple_draw_view_transform_constants.size);
+                m_per_frame_constants.size);
+            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(1,
+                m_constant_buffer_manager.GetBuffer(frame_index),
+                m_per_object_constants.size);
 
             // TODO: If models are switching, these updates will have to be per-frame
-            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(1, helmet_samplers[matComponent]);
-            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(2, helmet_textures[matComponent]);
+            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(2, helmet_samplers[matComponent]);
+            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(3, helmet_textures[matComponent]);
+
+            // TODO: I'm assuming the sampler, which is not correct
+            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(4, helmet_textures[GLTFModel::MaterialTextureType::MetallicRoughness]);
+            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(5, helmet_textures[GLTFModel::MaterialTextureType::Emissive]);
+            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(6, helmet_textures[GLTFModel::MaterialTextureType::Occlusion]);
+            m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(7, helmet_textures[GLTFModel::MaterialTextureType::NormalTex]);
         }
     }
 
@@ -225,7 +245,7 @@ void VkexInfoApp::Setup()
             m_generated_shader_states[AppShaderList::UpscalingCAS]
                 .descriptor_sets[frame_index]
                 ->UpdateDescriptor(0, constant_buffer,
-                                   m_cas_upscaling_constants.size);
+                    m_cas_upscaling_constants.size);
             m_generated_shader_states[AppShaderList::UpscalingCAS]
                 .descriptor_sets[frame_index]
                 ->UpdateDescriptor(
@@ -242,13 +262,13 @@ void VkexInfoApp::Setup()
 
         for (uint32_t frame_index = 0; frame_index < frame_count; frame_index++) {
             auto& per_frame_data = m_per_frame_datas[frame_index];
-            
+
             // TODO: Perhaps one pool for all frames?
 
             vkex::QueryPoolCreateInfo query_pool_create_info = {};
             query_pool_create_info.query_type = VkQueryType::VK_QUERY_TYPE_TIMESTAMP;
             query_pool_create_info.query_count = TimerTag::kTimerQueryCount;
-            
+
             {
                 VKEX_CALL(GetDevice()->CreateQueryPool(query_pool_create_info, &(per_frame_data.timer_query_pool)));
             }
@@ -256,7 +276,7 @@ void VkexInfoApp::Setup()
             per_frame_data.issued_gpu_timers.resize(TimerTag::kTimerTagCount);
         }
     }
-    
+
 }
 
 void VkexInfoApp::Update(double frame_elapsed_time)
@@ -274,15 +294,22 @@ void VkexInfoApp::Update(double frame_elapsed_time)
 
     if (m_animation_enabled) {
         // TODO: Make the rate configurable?
-        m_animation_progress += 1 / 120.f;
+        m_animation_progress += (1 / 60.f);
     }
-    float4x4 M = glm::translate(float3(0, 0, 0)) * 
-                 glm::rotate(m_animation_progress / 2.0f, float3(0, 1, 0)) * 
-                 glm::rotate(m_animation_progress / 4.0f, float3(1, 0, 0));
+    float4x4 M = glm::translate(float3(0, 0, 0)) *
+        glm::rotate(m_animation_progress / 2.0f, float3(0, 1, 0)) *
+        glm::rotate(m_animation_progress / 4.0f, float3(1, 0, 0));
     float4x4 V = camera.GetViewMatrix();
     float4x4 P = camera.GetProjectionMatrix();
 
-    m_simple_draw_view_transform_constants.data.ModelViewProjectionMatrix = P * V*M;
+    m_per_object_constants.data.worldMatrix = M;
+
+    m_per_frame_constants.data.viewProjectionMatrix = P * V;
+    m_per_frame_constants.data.cameraPos = eye;
+
+    m_per_frame_constants.data.dirLight = ConvertCPULightInfoToGPULightInfo(m_light_infos[0]);
+
+    UpdateMaterialConstants();
 
     UpdateTargetResolutionState();
     UpdateInternalResolutionState();
@@ -298,7 +325,7 @@ void VkexInfoApp::Update(double frame_elapsed_time)
 
     m_target_render_area.offset.x = 0;
     m_target_render_area.offset.x = 0;
-    m_target_render_area.extent= target_res_extent;
+    m_target_render_area.extent = target_res_extent;
 
     m_internal_to_target_scaled_copy_constants.data.srcWidth = internal_res_extent.width;
     m_internal_to_target_scaled_copy_constants.data.srcHeight = internal_res_extent.height;
@@ -311,7 +338,7 @@ void VkexInfoApp::Update(double frame_elapsed_time)
     m_target_to_present_scaled_copy_constants.data.dstHeight = present_res_extent.height;
 
     UpdateCASConstants(internal_res_extent, target_res_extent, 1.0f,
-                       m_cas_upscaling_constants);
+        m_cas_upscaling_constants);
 
     VKEX_ASSERT(m_delta_visualizer_mode < DeltaVisualizerMode::kDeltaVizCount);
     m_image_delta_options_constants.data.vizMode = uint(m_delta_visualizer_mode);
@@ -358,7 +385,7 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
 
         // TODO: Add UpdateDescriptor helper for ImageViews?
     }
-    
+
     cmd->Begin();
 
     {
@@ -383,7 +410,7 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
             0,
             { *(m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy].descriptor_sets[frame_index]) },
             &dynamic_offsets);
-        
+
         vkex::uint3 dispatchDims = CalculateSimpleDispatchDimensions(
             m_generated_shader_states[AppShaderList::TargetToPresentScaledCopy],
             GetPresentResolutionExtent());
@@ -413,7 +440,7 @@ void VkexInfoApp::Present(vkex::Application::PresentData* p_data)
         cmd->CmdBeginRenderPass(swapchain_render_pass, &clear_values);
         cmd->CmdSetViewport(swapchain_render_pass->GetFullRenderArea());
         cmd->CmdSetScissor(swapchain_render_pass->GetFullRenderArea());
-        
+
         this->DrawAppInfoGUI(frame_index);
         this->DrawImGui(cmd);
 

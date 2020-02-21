@@ -49,7 +49,6 @@ list(APPEND SRC_FILES
 
 list(APPEND VSPS_SHADER_FILES
   ${SHADERS_DIR}/draw_helmet.hlsl
-  ${SHADERS_DIR}/draw_vertex.hlsl
 )
 
 list(APPEND CS_SHADER_FILES

@@ -59,6 +59,8 @@
 #  define VC_EXTRALEAN
 #  define WIN32_LEAN_AND_MEAN
 #  include <Windows.h>
+#  include <chrono>
+#  include <thread>
 #endif
 
 #define VKEX_TIMER_SECONDS_TO_NANOS  1000000000
@@ -659,7 +661,12 @@ int vkex_timer_sleep_seconds(double seconds)
 #elif defined(VKEX_WIN32)
 int vkex_timer_sleep_seconds(double seconds)
 {
-  return VKEX_TIMER_ERROR_SLEEP_FAILED;
+  double nanos = seconds * (double)VKEX_TIMER_SECONDS_TO_NANOS;
+
+  auto sleepTime = std::chrono::duration<double, std::nano>(nanos);
+  std::this_thread::sleep_for(sleepTime);
+
+  return VKEX_TIMER_SUCCESS;
 }
 #endif
 

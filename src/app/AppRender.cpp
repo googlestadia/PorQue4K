@@ -20,7 +20,8 @@ void VkexInfoApp::RenderInternalAndTarget(vkex::CommandBuffer cmd, uint32_t fram
 {
     auto& per_frame_data = m_per_frame_datas[frame_index];
 
-    auto view_transform_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_simple_draw_view_transform_constants);
+    auto per_frame_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_per_frame_constants);
+    auto per_object_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_per_object_constants);
 
     cmd->Begin();
 
@@ -49,7 +50,7 @@ void VkexInfoApp::RenderInternalAndTarget(vkex::CommandBuffer cmd, uint32_t fram
 
             cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::Geometry].graphics_pipeline);
 
-            std::vector<uint32_t> dynamic_offsets = { view_transform_dynamic_offset };
+            std::vector<uint32_t> dynamic_offsets = { per_frame_dynamic_offset,  per_object_dynamic_offset };
             cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS,
                 *(m_generated_shader_states[AppShaderList::Geometry].pipeline_layout),
                 0,
@@ -148,7 +149,8 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t
 {
     auto& per_frame_data = m_per_frame_datas[frame_index];
 
-    auto view_transform_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_simple_draw_view_transform_constants);
+    auto per_frame_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_per_frame_constants);
+    auto per_object_dynamic_offset = m_constant_buffer_manager.UploadConstantsToDynamicBuffer(m_per_object_constants);
 
     // Target resolution draw
     IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kSceneRenderTarget);
@@ -166,7 +168,7 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t
         cmd->CmdSetScissor(m_target_render_area);
         cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::Geometry].graphics_pipeline);
 
-        std::vector<uint32_t> dynamic_offsets = { view_transform_dynamic_offset };
+        std::vector<uint32_t> dynamic_offsets = { per_frame_dynamic_offset,  per_object_dynamic_offset };
         cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS,
             *(m_generated_shader_states[AppShaderList::Geometry].pipeline_layout),
             0,

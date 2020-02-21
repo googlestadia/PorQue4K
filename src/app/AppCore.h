@@ -26,17 +26,20 @@
 using float2 = vkex::float2;
 using float3 = vkex::float3;
 using float4 = vkex::float4;
+
 using float2x2 = vkex::float2x2;
 using float3x3 = vkex::float3x3;
 using float4x4 = vkex::float4x4;
-using uint4 = vkex::uint4;
 
 using uint = vkex::uint;
+using uint2 = vkex::uint2;
+using uint4 = vkex::uint4;
 
 // Placed here to take advantage of the above 'using' directives
 #include "ConstantBufferStructs.h"
 
-using ViewTransformConstants = vkex::ConstantBufferData<ViewTransformData>;
+using PerFrameConstants = vkex::ConstantBufferData<PerFrameConstantData>;
+using PerObjectConstants = vkex::ConstantBufferData<PerObjectConstantData>;
 using ScaledTexCopyDimsConstants = vkex::ConstantBufferData<ScaledTexCopyDimensionsData>;
 using ImageDeltaOptionsConstants = vkex::ConstantBufferData<ImageDeltaOptions>;
 using CASUpscalingConstants = vkex::ConstantBufferData<CASData>;
@@ -47,12 +50,12 @@ enum ShaderPipelineType {
 };
 
 enum AppShaderList {
-  Geometry = 0,
-  InternalToTargetScaledCopy = 1,
-  InternalTargetImageDelta = 2,
-  TargetToPresentScaledCopy = 3,
-  UpscalingCAS = 4,
-  NumTypes,
+    Geometry = 0,
+    InternalToTargetScaledCopy = 1,
+    InternalTargetImageDelta = 2,
+    TargetToPresentScaledCopy = 3,
+    UpscalingCAS = 4,
+    NumTypes,
 };
 
 struct ShaderProgramInputs {
@@ -76,12 +79,28 @@ struct GeneratedShaderState {
     std::vector<vkex::DescriptorSet> descriptor_sets;
 };
 
+enum LightType {
+    kDirectional = 0,
+    kLightTypeCount,
+};
+
+struct CPULightInfo {
+    LightType           lightType;
+
+    float3        direction;
+    float3        color;
+    float         intensity;
+
+    // TODO: Spotlight + Point light data
+    // TODO: Sync with GPULightInfo
+};
+
 // TODO: Rename these enums into something more sane...
 
 enum UpscalingTechniqueKey {
-  None = 0,
-  CAS = 1,
-  kuCount,
+    None = 0,
+    CAS = 1,
+    kuCount,
 };
 
 enum ResolutionInfoKey {
@@ -129,7 +148,7 @@ struct GpuTimerInfo {
 
 struct PerFrameData {
     vkex::QueryPool timer_query_pool;
-    
+
     bool timestamps_issued = false;
     bool timestamps_readback = false;
 
@@ -179,6 +198,9 @@ protected:
     void ReadbackGpuTimestamps(uint32_t frame_index);
     double CalculateGpuTimeRange(const PerFrameData& per_frame_data, TimerTag requested_range, double nano_scaler);
 
+    GPULightInfo ConvertCPULightInfoToGPULightInfo(CPULightInfo& cpuLight);
+    void UpdateMaterialConstants();
+
     // TODO: This is very informal because the TG size doesn't necessarily 
     // mean it represents 1 output pixel per thread
     vkex::uint3 CalculateSimpleDispatchDimensions(GeneratedShaderState& gen_shader_state, VkExtent2D dest_image_extent);
@@ -195,25 +217,29 @@ protected:
     void DrawModel(vkex::CommandBuffer cmd);
 
     // AppSetup.cpp
-    void SetupImagesAndRenderPasses(const VkExtent2D present_extent, 
-                                    const VkFormat color_format, 
-                                    const VkFormat depth_format);
+    void SetupImagesAndRenderPasses(const VkExtent2D present_extent,
+        const VkFormat color_format,
+        const VkFormat depth_format);
     void SetupShaders(const std::vector<ShaderProgramInputs>& shader_inputs,
-                            std::vector<GeneratedShaderState>& generated_shader_states);
+        std::vector<GeneratedShaderState>& generated_shader_states);
 
     // CAS.cpp
     void UpdateCASConstants(const VkExtent2D &srcExtent,
-                            const VkExtent2D &dstExtent, const float sharpness,
-                            CASUpscalingConstants &constants);
+        const VkExtent2D &dstExtent, const float sharpness,
+        CASUpscalingConstants &constants);
 
-  private:
+private:
+
+    // CPU side state
     bool                             m_animation_enabled = true;
     float                            m_animation_progress = 0.0f;
+    std::vector<CPULightInfo>        m_light_infos;
 
     std::vector<GeneratedShaderState> m_generated_shader_states;
     vkex::DescriptorPool              m_shared_descriptor_pool = nullptr;
 
-    ViewTransformConstants      m_simple_draw_view_transform_constants = {};
+    PerFrameConstants           m_per_frame_constants = {};
+    PerObjectConstants          m_per_object_constants = {};
     ScaledTexCopyDimsConstants  m_internal_to_target_scaled_copy_constants = {};
     ImageDeltaOptionsConstants  m_image_delta_options_constants = {};
     ScaledTexCopyDimsConstants  m_target_to_present_scaled_copy_constants = {};

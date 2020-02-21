@@ -281,10 +281,37 @@ void GLTFModel::PopulateFromModel(vkex::fs::path model_path, vkex::Queue queue)
         m_materials.resize(matCount);
 
         for (size_t matIndex = 0; matIndex < matCount; matIndex++) {
-            VKEX_ASSERT(model.materials[matIndex].pbrMetallicRoughness.baseColorTexture.index >= 0);
-            m_materials[matIndex].baseColorTextureIndex = model.materials[matIndex].pbrMetallicRoughness.baseColorTexture.index;
+            auto& source_material = model.materials[matIndex];
 
-            // TODO: Support other textures + factors
+            VKEX_ASSERT(source_material.pbrMetallicRoughness.baseColorTexture.index >= 0);
+            m_materials[matIndex].baseColorTextureIndex = uint32_t(source_material.pbrMetallicRoughness.baseColorTexture.index);
+
+            VKEX_ASSERT(source_material.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0);
+            m_materials[matIndex].metallicRoughnessTextureIndex = uint32_t(source_material.pbrMetallicRoughness.metallicRoughnessTexture.index);
+
+            VKEX_ASSERT(source_material.emissiveTexture.index >= 0);
+            m_materials[matIndex].emissiveTextureIndex = uint32_t(source_material.emissiveTexture.index);
+
+            VKEX_ASSERT(source_material.occlusionTexture.index >= 0);
+            m_materials[matIndex].occlusionTextureIndex = uint32_t(source_material.occlusionTexture.index);
+
+            VKEX_ASSERT(source_material.normalTexture.index >= 0);
+            m_materials[matIndex].normalTextureIndex = uint32_t(source_material.normalTexture.index);
+
+            VKEX_ASSERT(source_material.pbrMetallicRoughness.baseColorFactor.size() == 4);
+            for (size_t factor_index = 0; factor_index < source_material.pbrMetallicRoughness.baseColorFactor.size(); factor_index++) {
+                m_materials[matIndex].baseColorFactor[factor_index] = float(source_material.pbrMetallicRoughness.baseColorFactor[factor_index]);
+
+            }
+
+            VKEX_ASSERT(source_material.emissiveFactor.size() == 3);
+            for (size_t factor_index = 0; factor_index < source_material.emissiveFactor.size(); factor_index++) {
+                m_materials[matIndex].emissiveFactor[factor_index] = float(source_material.emissiveFactor[factor_index]);
+
+            }
+
+            m_materials[matIndex].metallicFactor = float(source_material.pbrMetallicRoughness.metallicFactor);
+            m_materials[matIndex].roughnessFactor = float(source_material.pbrMetallicRoughness.roughnessFactor);
         }
     }
 
@@ -325,13 +352,28 @@ void GLTFModel::PopulateFromModel(vkex::fs::path model_path, vkex::Queue queue)
 
     {
         for (auto& material : m_materials) {
-            material.textures.resize(MaterialComponentType::MaterialComponentTypeCount);
-            material.samplers.resize(MaterialComponentType::MaterialComponentTypeCount);
+            material.textures.resize(MaterialTextureType::MaterialComponentTypeCount);
+            material.samplers.resize(MaterialTextureType::MaterialComponentTypeCount);
 
-            const auto& texture = m_textures[material.baseColorTextureIndex];
+            const auto& baseColorTexture = m_textures[material.baseColorTextureIndex];
+            material.textures[MaterialTextureType::BaseColor] = m_images[baseColorTexture.imageIndex].gpuTexture;
+            material.samplers[MaterialTextureType::BaseColor] = m_samplers[baseColorTexture.samplerIndex];
 
-            material.textures[MaterialComponentType::BaseColor] = m_images[texture.imageIndex].gpuTexture;
-            material.samplers[MaterialComponentType::BaseColor] = m_samplers[texture.samplerIndex];
+            const auto& metallicRoughnessTexture = m_textures[material.metallicRoughnessTextureIndex];
+            material.textures[MaterialTextureType::MetallicRoughness] = m_images[metallicRoughnessTexture.imageIndex].gpuTexture;
+            material.samplers[MaterialTextureType::MetallicRoughness] = m_samplers[metallicRoughnessTexture.samplerIndex];
+
+            const auto& emissiveTexture = m_textures[material.emissiveTextureIndex];
+            material.textures[MaterialTextureType::Emissive] = m_images[emissiveTexture.imageIndex].gpuTexture;
+            material.samplers[MaterialTextureType::Emissive] = m_samplers[emissiveTexture.samplerIndex];
+
+            const auto& occlusionTexture = m_textures[material.occlusionTextureIndex];
+            material.textures[MaterialTextureType::Occlusion] = m_images[occlusionTexture.imageIndex].gpuTexture;
+            material.samplers[MaterialTextureType::Occlusion] = m_samplers[occlusionTexture.samplerIndex];
+
+            const auto& normalTexture = m_textures[material.normalTextureIndex];
+            material.textures[MaterialTextureType::NormalTex] = m_images[normalTexture.imageIndex].gpuTexture;
+            material.samplers[MaterialTextureType::NormalTex] = m_samplers[normalTexture.samplerIndex];
         }
     }
 }
@@ -342,10 +384,14 @@ bool GLTFModel::IsImageSRGB(const uint32_t image_index)
     bool use_sRGB = false;
 
     for (const auto& mat : m_materials) {
-        // TODO: Check with emissive
+        const auto& baseColorTexture = m_textures[mat.baseColorTextureIndex];
+        if (baseColorTexture.imageIndex == image_index) {
+            use_sRGB = true;
+            break;
+        }
 
-        const auto& texture = m_textures[mat.baseColorTextureIndex];
-        if (texture.imageIndex == image_index) {
+        const auto& emissiveTexture = m_textures[mat.emissiveTextureIndex];
+        if (emissiveTexture.imageIndex == image_index) {
             use_sRGB = true;
             break;
         }
@@ -393,6 +439,70 @@ GLTFModel::GetMaterialSamplers(uint32_t node_index, uint32_t primitive_index)
     const auto& material = m_materials[prim.materialIndex];
 
     return material.samplers;
+}
+
+const float* GLTFModel::GetBaseColorFactor(uint32_t node_index, uint32_t primitive_index)
+{
+    const auto& prim = GetPrimitive(node_index, primitive_index);
+    const auto& material = m_materials[prim.materialIndex];
+
+    return &material.baseColorFactor[0];
+}
+
+const float* GLTFModel::GetEmissiveFactor(uint32_t node_index, uint32_t primitive_index)
+{
+    const auto& prim = GetPrimitive(node_index, primitive_index);
+    const auto& material = m_materials[prim.materialIndex];
+
+    return &material.emissiveFactor[0];
+}
+
+float GLTFModel::GetMetallicFactor(uint32_t node_index, uint32_t primitive_index)
+{
+    const auto& prim = GetPrimitive(node_index, primitive_index);
+    const auto& material = m_materials[prim.materialIndex];
+
+    return material.metallicFactor;
+}
+
+float GLTFModel::GetRoughnessFactor(uint32_t node_index, uint32_t primitive_index)
+{
+    const auto& prim = GetPrimitive(node_index, primitive_index);
+    const auto& material = m_materials[prim.materialIndex];
+
+    return material.roughnessFactor;
+}
+
+void GLTFModel::GetDebugBaseColorFactor(uint32_t node_index, uint32_t primitive_index, float** out_base_color_factor)
+{
+    const auto& prim = GetPrimitive(node_index, primitive_index);
+    auto& material = m_materials[prim.materialIndex];
+
+    *out_base_color_factor = &material.baseColorFactor[0];
+}
+
+void GLTFModel::GetDebugEmissiveFactor(uint32_t node_index, uint32_t primitive_index, float** out_emissive_factor)
+{
+    const auto& prim = GetPrimitive(node_index, primitive_index);
+    auto& material = m_materials[prim.materialIndex];
+
+    *out_emissive_factor = &material.emissiveFactor[0];
+}
+
+void GLTFModel::GetDebugMetallicFactor(uint32_t node_index, uint32_t primitive_index, float** out_metallic)
+{
+    const auto& prim = GetPrimitive(node_index, primitive_index);
+    auto& material = m_materials[prim.materialIndex];
+
+    *out_metallic = &material.metallicFactor;
+}
+
+void GLTFModel::GetDebugRoughnessFactor(uint32_t node_index, uint32_t primitive_index, float** out_roughness)
+{
+    const auto& prim = GetPrimitive(node_index, primitive_index);
+    auto& material = m_materials[prim.materialIndex];
+
+    *out_roughness = &material.roughnessFactor;
 }
 
 vkex::Buffer GLTFModel::GetIndexBuffer(uint32_t node_index, uint32_t primitive_index)

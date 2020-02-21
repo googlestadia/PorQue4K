@@ -19,11 +19,17 @@
 // Enable if we want simple CPU metrics in GUI
 //#define GUI_CPU_STATS
 
+// If we want to manipulate light properties
+//#define LIGHT_DEBUGGER
+
+// If we want to manipulate material properties
+//#define MATERIAL_DEBUGGER
+
 // TODO: Maybe move resolution tables to another file? To be included directly?
 
 struct UpscalingTechniqueInfo {
-  UpscalingTechniqueKey id;
-  std::string name;
+    UpscalingTechniqueKey id;
+    std::string name;
 };
 
 struct ResolutionInfo {
@@ -45,9 +51,9 @@ struct PresentResolutionChain {
 };
 
 static UpscalingTechniqueInfo
-    s_upscaling_techniques[UpscalingTechniqueKey::kuCount] = {
-        {UpscalingTechniqueKey::None, "None"},
-        {UpscalingTechniqueKey::CAS, "FidelityFX CAS"},
+s_upscaling_techniques[UpscalingTechniqueKey::kuCount] = {
+    {UpscalingTechniqueKey::None, "None"},
+    {UpscalingTechniqueKey::CAS, "FidelityFX CAS"},
 };
 
 static ResolutionInfo s_resolution_infos[ResolutionInfoKey::krCount] = {
@@ -132,16 +138,16 @@ void VkexInfoApp::UpdateInternalResolutionState()
 }
 
 void VkexInfoApp::UpdateUpscalingTechniqueState() {
-  m_upscaling_technique_key =
-      s_upscaling_techniques[m_selected_upscaling_technique_index].id;
+    m_upscaling_technique_key =
+        s_upscaling_techniques[m_selected_upscaling_technique_index].id;
 }
 
 UpscalingTechniqueKey VkexInfoApp::GetUpscalingTechnique() {
-  return m_upscaling_technique_key;
+    return m_upscaling_technique_key;
 }
 
 const char *VkexInfoApp::GetUpscalingTechniqueText() {
-  return s_upscaling_techniques[m_upscaling_technique_key].name.c_str();
+    return s_upscaling_techniques[m_upscaling_technique_key].name.c_str();
 }
 
 VkExtent2D VkexInfoApp::GetInternalResolutionExtent()
@@ -175,9 +181,9 @@ const char * VkexInfoApp::GetPresentResolutionText()
 
 void VkexInfoApp::BuildUpscalingTechniqueList(
     std::vector<const char *> &upscaling_technique_list) {
-  for (const auto &technique : s_upscaling_techniques) {
-    upscaling_technique_list.push_back(technique.name.c_str());
-  }
+    for (const auto &technique : s_upscaling_techniques) {
+        upscaling_technique_list.push_back(technique.name.c_str());
+    }
 }
 
 void VkexInfoApp::BuildInternalResolutionTextList(std::vector<const char*>& internal_text_list)
@@ -239,10 +245,10 @@ void VkexInfoApp::ReadbackGpuTimestamps(uint32_t frame_index)
     for (uint32_t tag_index = 0; tag_index < TimerTag::kTimerTagCount; tag_index++) {
         uint32_t slot_start_index = tag_index * 2;
 
-        per_frame_data.issued_gpu_timers[tag_index].start_time  = data[slot_start_index + 0];
-        per_frame_data.issued_gpu_timers[tag_index].end_time    = data[slot_start_index + 1];
+        per_frame_data.issued_gpu_timers[tag_index].start_time = data[slot_start_index + 0];
+        per_frame_data.issued_gpu_timers[tag_index].end_time = data[slot_start_index + 1];
     }
-    
+
     per_frame_data.timestamps_readback = true;
 }
 
@@ -266,6 +272,33 @@ vkex::uint3 VkexInfoApp::CalculateSimpleDispatchDimensions(GeneratedShaderState&
     dispatch_dims.y = uint32_t(ceil((float(dest_image_extent.height) / tg_dims.y)));
 
     return dispatch_dims;
+}
+
+GPULightInfo VkexInfoApp::ConvertCPULightInfoToGPULightInfo(CPULightInfo& cpuLight)
+{
+    GPULightInfo gpuLightOut = {};
+    gpuLightOut.direction = cpuLight.direction;
+    gpuLightOut.color = cpuLight.color;
+    gpuLightOut.intensity = cpuLight.intensity;
+
+    return gpuLightOut;
+}
+
+void VkexInfoApp::UpdateMaterialConstants()
+{
+    // TODO: Pass in model reference?
+
+    m_per_object_constants.data.baseColorFactor[0] = (m_helmet_model.GetBaseColorFactor(0, 0))[0];
+    m_per_object_constants.data.baseColorFactor[1] = (m_helmet_model.GetBaseColorFactor(0, 0))[1];
+    m_per_object_constants.data.baseColorFactor[2] = (m_helmet_model.GetBaseColorFactor(0, 0))[2];
+    m_per_object_constants.data.baseColorFactor[3] = (m_helmet_model.GetBaseColorFactor(0, 0))[3];
+
+    m_per_object_constants.data.emissiveFactor[0] = (m_helmet_model.GetEmissiveFactor(0, 0))[0];
+    m_per_object_constants.data.emissiveFactor[1] = (m_helmet_model.GetEmissiveFactor(0, 0))[1];
+    m_per_object_constants.data.emissiveFactor[2] = (m_helmet_model.GetEmissiveFactor(0, 0))[2];
+
+    m_per_object_constants.data.metallicFactor = m_helmet_model.GetMetallicFactor(0, 0);
+    m_per_object_constants.data.roughnessFactor = m_helmet_model.GetRoughnessFactor(0, 0);
 }
 
 ImVec2 VkexInfoApp::GetSuggestedGUISize()
@@ -323,7 +356,7 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index)
             }
             ImGui::Columns(1);
         }
-        
+
         ImGui::Separator();
 
         {
@@ -348,16 +381,16 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index)
             //          Delta visualizers...
             ImGui::Columns(2);
             {
-              std::vector<const char *> upscaling_techniques;
-              BuildUpscalingTechniqueList(upscaling_techniques);
+                std::vector<const char *> upscaling_techniques;
+                BuildUpscalingTechniqueList(upscaling_techniques);
 
-              ImGui::Text("Upscaling technique");
-              ImGui::NextColumn();
-              ImGui::Combo("##UpscalingTech",
-                           (int *)(&m_selected_upscaling_technique_index),
-                           upscaling_techniques.data(),
-                           int(upscaling_techniques.size()));
-              ImGui::NextColumn();
+                ImGui::Text("Upscaling technique");
+                ImGui::NextColumn();
+                ImGui::Combo("##UpscalingTech",
+                    (int *)(&m_selected_upscaling_technique_index),
+                    upscaling_techniques.data(),
+                    int(upscaling_techniques.size()));
+                ImGui::NextColumn();
             }
             {
                 std::vector<const char*> resolution_items;
@@ -384,7 +417,7 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index)
                 ImGui::NextColumn();
             }
             {
-                std::vector<const char*> visualizer_items = {"Off", "Luma delta", "RGB delta"};
+                std::vector<const char*> visualizer_items = { "Off", "Luma delta", "RGB delta" };
                 VKEX_ASSERT(int(visualizer_items.size()) == int(DeltaVisualizerMode::kDeltaVizCount));
                 ImGui::Text("Delta Visualizer");
                 ImGui::NextColumn();
@@ -448,6 +481,88 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index)
                 ImGui::NextColumn();
             }
         }
+
+#if defined(LIGHT_DEBUGGER)
+        ImGui::Separator();
+        {
+            ImGui::Columns(2);
+
+            // TODO: Light list picker
+
+            CPULightInfo& light = m_light_infos[0];
+
+            ImGui::Text("Light Type");
+            ImGui::NextColumn();
+            std::string light_type_string;
+            if (light.lightType == LightType::kDirectional) {
+                light_type_string = "Directional";
+            }
+            else {
+                light_type_string = "UNKNOWN";
+            }
+            ImGui::Text(light_type_string.c_str());
+            ImGui::NextColumn();
+
+            ImGui::Text("Direction");
+            ImGui::NextColumn();
+            ImGui::SliderFloat3("##Direction", &light.direction[0], -1.0, 1.0f);
+            ImGui::NextColumn();
+
+            ImGui::Text("Intensity");
+            ImGui::NextColumn();
+            ImGui::SliderFloat("##Intensity", &light.intensity, 0.0, 50.0f);
+            ImGui::NextColumn();
+
+            ImGui::Text("Color");
+            ImGui::NextColumn();
+            ImGui::ColorPicker3("##LightColor", &light.color[0]);
+            ImGui::NextColumn();
+        }
+
+#endif // defined(LIGHT_DEBUGGER)
+
+#if defined(MATERIAL_DEBUGGER)
+
+        ImGui::Separator();
+        {
+            ImGui::Columns(2);
+            {
+                {
+                    float* debug_base_color;
+                    m_helmet_model.GetDebugBaseColorFactor(0, 0, &debug_base_color);
+                    ImGui::Text("Base Color Factor");
+                    ImGui::NextColumn();
+                    ImGui::SliderFloat4("##BaseColorFactor", debug_base_color, 0.0, 1.0f);
+                    ImGui::NextColumn();
+                }
+                {
+                    float* debug_emissive;
+                    m_helmet_model.GetDebugEmissiveFactor(0, 0, &debug_emissive);
+                    ImGui::Text("Emissive Factor");
+                    ImGui::NextColumn();
+                    ImGui::SliderFloat3("##EmissiveFactor", debug_emissive, 0.0, 1.0f);
+                    ImGui::NextColumn();
+                }
+                {
+                    float* debug_metallic;
+                    m_helmet_model.GetDebugMetallicFactor(0, 0, &debug_metallic);
+                    ImGui::Text("Metallic Factor");
+                    ImGui::NextColumn();
+                    ImGui::SliderFloat("##MetallicFactor", debug_metallic, 0.0, 1.0f);
+                    ImGui::NextColumn();
+                }
+                {
+                    float* debug_roughness;
+                    m_helmet_model.GetDebugRoughnessFactor(0, 0, &debug_roughness);
+                    ImGui::Text("Roughness Factor");
+                    ImGui::NextColumn();
+                    ImGui::SliderFloat("##RoughnessFactor", debug_roughness, 0.0, 1.0f);
+                    ImGui::NextColumn();
+                }
+            }
+        }
+
+#endif //defined(MATERIAL_DEBUGGER)
 
         // TODO: Model picker?
 

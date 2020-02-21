@@ -10,7 +10,7 @@ CAS_INC_DIR=$(realpath --relative-to=${SCRIPT_DIR} ${SRC_DIR}/../../../third_par
 
 echo ${VKEX_INC_DIR}
 
-HLSL_FILES=(draw_vertex.hlsl draw_helmet.hlsl)
+HLSL_FILES=(draw_helmet.hlsl)
 for src_file in "${HLSL_FILES[@]}"
 do
   echo -e "\nCompiling ${src_file}"

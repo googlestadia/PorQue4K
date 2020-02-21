@@ -40,8 +40,10 @@ public:
 
 protected:
 
+    // TODO: This number is totally magical, and will be 
+    // replaced by a value based on actual usage _soon_
     enum ConstantBufferManagerConstants {
-        kDefaultBufferSizeInBytes = 1024 * 1024,
+        kDefaultBufferSizeInBytes = 4 * 1024 * 1024,
     };
 
     bool AllocDynamicBufferSpace(size_t size, void** out_ptr, uint32_t& dynamic_offset);
