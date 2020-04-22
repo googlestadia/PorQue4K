@@ -80,64 +80,66 @@ message(STATUS "Using Vulkan lib: ${VULKAN_LIBRARY}")
 
 set(VKEX_TOP_INC_DIR ${CMAKE_SOURCE_DIR}/src)
 
-if (NOT DXC_PATH)
-  if (WIN32)
-    message("Path to DXC not specified! Point to dxc.exe via DXC_PATH CMake cache entry")
-    find_program(DXC_PATH dxc.exe)
-  else()
-    set(DXC_PATH dxc)
+if (BUILD_SHADERS)
+  if (NOT DXC_PATH)
+    if (WIN32)
+      message("Path to DXC not specified! Point to dxc.exe via DXC_PATH CMake cache entry")
+      find_program(DXC_PATH dxc.exe)
+    else()
+      set(DXC_PATH dxc)
+    endif()
+    message("Found DXC: ${DXC_PATH}")
   endif()
-  message("Found DXC: ${DXC_PATH}")
-endif()
 
-get_filename_component(ABSOLUTE ${DXC_PATH} PROGRAM)
-file(TO_NATIVE_PATH ${DXC_PATH} DXC_PATH)
+  get_filename_component(ABSOLUTE ${DXC_PATH} PROGRAM)
+  file(TO_NATIVE_PATH ${DXC_PATH} DXC_PATH)
 
-message("Using DXC: ${DXC_PATH}")
+  message("Using DXC: ${DXC_PATH}")
 
-# TODO: Do I want to convert add_custom_command to
-# add_custom_target in order to properly manage
-# dependencies?
+  # TODO: Do I want to convert add_custom_command to
+  # add_custom_target in order to properly manage
+  # dependencies?
 
-function(compile_hlsl_vs_ps hlsl_path output_dir working_dir)
-  #message("${hlsl_path}")
-  get_filename_component(SHADER_DIR ${hlsl_path} DIRECTORY)
-  file(TO_NATIVE_PATH ${SHADER_DIR} SHADER_DIR)
-  string(REPLACE "hlsl" "vs.spv" vs_file ${hlsl_path})
-  string(REPLACE "hlsl" "ps.spv" ps_file ${hlsl_path})
-  get_filename_component(vs_file ${vs_file} NAME)
-  get_filename_component(ps_file ${ps_file} NAME)
-  set(vs_file ${output_dir}/${vs_file})
-  set(ps_file ${output_dir}/${ps_file})
-  file(TO_NATIVE_PATH ${working_dir} INCLUDE_PATH)
-  #message("${vs_file} ${ps_file}")
-  add_custom_command(
-    COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -I ${SHADER_DIR} -T vs_6_0 -spirv -E vsmain -Fo ${vs_file} ${hlsl_path}
-    COMMAND ${CMAKE_COMMAND} -E echo "Compiling VS ${hlsl_path} to ${vs_file}"
-    COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -I ${SHADER_DIR} -T ps_6_0 -spirv -E psmain -Fo ${ps_file} ${hlsl_path}
-    COMMAND ${CMAKE_COMMAND} -E echo "Compiling PS ${hlsl_path} to ${ps_file}"
-    IMPLICIT_DEPENDS CXX ${hlsl_path}
-    MAIN_DEPENDENCY ${hlsl_path}
-    OUTPUT ${vs_file} ${ps_file}
-    WORKING_DIRECTORY ${working_dir}
-  )
-endfunction()
+  function(compile_hlsl_vs_ps hlsl_path output_dir working_dir)
+    #message("${hlsl_path}")
+    get_filename_component(SHADER_DIR ${hlsl_path} DIRECTORY)
+    file(TO_NATIVE_PATH ${SHADER_DIR} SHADER_DIR)
+    string(REPLACE "hlsl" "vs.spv" vs_file ${hlsl_path})
+    string(REPLACE "hlsl" "ps.spv" ps_file ${hlsl_path})
+    get_filename_component(vs_file ${vs_file} NAME)
+    get_filename_component(ps_file ${ps_file} NAME)
+    set(vs_file ${output_dir}/${vs_file})
+    set(ps_file ${output_dir}/${ps_file})
+    file(TO_NATIVE_PATH ${working_dir} INCLUDE_PATH)
+    #message("${vs_file} ${ps_file}")
+    add_custom_command(
+      COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -I ${SHADER_DIR} -T vs_6_0 -spirv -E vsmain -Fo ${vs_file} ${hlsl_path}
+      COMMAND ${CMAKE_COMMAND} -E echo "Compiling VS ${hlsl_path} to ${vs_file}"
+      COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -I ${SHADER_DIR} -T ps_6_0 -spirv -E psmain -Fo ${ps_file} ${hlsl_path}
+      COMMAND ${CMAKE_COMMAND} -E echo "Compiling PS ${hlsl_path} to ${ps_file}"
+      IMPLICIT_DEPENDS CXX ${hlsl_path}
+      MAIN_DEPENDENCY ${hlsl_path}
+      OUTPUT ${vs_file} ${ps_file}
+      WORKING_DIRECTORY ${working_dir}
+    )
+  endfunction()
 
-function(compile_hlsl_cs hlsl_path output_dir working_dir addl_incl_dir)
-  #message("${hlsl_path}")
-  string(REPLACE "hlsl" "cs.spv" cs_file ${hlsl_path})
-  get_filename_component(cs_file ${cs_file} NAME)
-  set(cs_file ${output_dir}/${cs_file})
-  file(TO_NATIVE_PATH ${working_dir} INCLUDE_PATH)
-  add_custom_command(
-    COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -I ${addl_incl_dir} -T cs_6_0 -spirv -E csmain -Fo ${cs_file} ${hlsl_path}
-    COMMAND ${CMAKE_COMMAND} -E echo "Compiling VS ${hlsl_path} to ${cs_file}"
-    IMPLICIT_DEPENDS CXX ${hlsl_path}
-    MAIN_DEPENDENCY ${hlsl_path}
-    OUTPUT ${cs_file}
-    WORKING_DIRECTORY ${working_dir}
-  )
-endfunction()
+  function(compile_hlsl_cs hlsl_path output_dir working_dir addl_incl_dir)
+    #message("${hlsl_path}")
+    string(REPLACE "hlsl" "cs.spv" cs_file ${hlsl_path})
+    get_filename_component(cs_file ${cs_file} NAME)
+    set(cs_file ${output_dir}/${cs_file})
+    file(TO_NATIVE_PATH ${working_dir} INCLUDE_PATH)
+    add_custom_command(
+      COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -I ${addl_incl_dir} -T cs_6_0 -spirv -E csmain -Fo ${cs_file} ${hlsl_path}
+      COMMAND ${CMAKE_COMMAND} -E echo "Compiling VS ${hlsl_path} to ${cs_file}"
+      IMPLICIT_DEPENDS CXX ${hlsl_path}
+      MAIN_DEPENDENCY ${hlsl_path}
+      OUTPUT ${cs_file}
+      WORKING_DIRECTORY ${working_dir}
+    )
+  endfunction()
+endif(BUILD_SHADERS)
 
 if(GGP)
     # Needed?
