@@ -12,6 +12,28 @@ vkex::Result CreateSimpleRenderPass(
     SimpleRenderPass* p_simple_pass
 )
 {
+    return CreateSimpleMSRenderPass(
+        device, 
+        queue, 
+        width, 
+        height, 
+        color_format, 
+        depth_format, 
+        VK_SAMPLE_COUNT_1_BIT, 
+        p_simple_pass);
+}
+
+vkex::Result CreateSimpleMSRenderPass(
+    vkex::Device        device,
+    vkex::Queue         queue,
+    uint32_t            width,
+    uint32_t            height,
+    VkFormat            color_format,
+    VkFormat            depth_format,
+    VkSampleCountFlagBits  sample_count,
+    SimpleRenderPass*   p_simple_pass
+)
+{
     SimpleRenderPass simple_pass = {};
     simple_pass.rtv_clear_value = { 0.0f, 0.0f, 0.0f, 0.0f };
     simple_pass.dsv_clear_value = { 0.0f, 0 };
@@ -24,7 +46,7 @@ vkex::Result CreateSimpleRenderPass(
         create_info.image.extent = { width, height, 1 };
         create_info.image.mip_levels = 1;
         create_info.image.array_layers = 1;
-        create_info.image.samples = VK_SAMPLE_COUNT_1_BIT;
+        create_info.image.samples = sample_count;
         create_info.image.tiling = VK_IMAGE_TILING_OPTIMAL;
         create_info.image.usage_flags.bits.color_attachment = true;
         create_info.image.usage_flags.bits.transfer_src = true; // Needed?
@@ -65,7 +87,7 @@ vkex::Result CreateSimpleRenderPass(
         create_info.image.extent = { width, height, 1 };
         create_info.image.mip_levels = 1;
         create_info.image.array_layers = 1;
-        create_info.image.samples = VK_SAMPLE_COUNT_1_BIT;
+        create_info.image.samples = sample_count;
         create_info.image.tiling = VK_IMAGE_TILING_OPTIMAL;
         create_info.image.usage_flags.bits.depth_stencil_attachment = true;
         create_info.image.usage_flags.bits.transfer_src = true;

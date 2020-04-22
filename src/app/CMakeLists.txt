@@ -30,7 +30,9 @@ list(APPEND HDR_FILES
     ${SRC_DIR}/ConstantBufferManager.h
     ${SRC_DIR}/ConstantBufferStructs.h
     ${SRC_DIR}/GLTFModel.h
+    ${SRC_DIR}/SharedShaderConstants.h
     ${SRC_DIR}/SimpleRenderPass.h
+    ${SHADERS_DIR}/draw_shader_core.h
     ${FIDELITYFX_INC_DIR}/ffx_a.h
     ${FIDELITYFX_INC_DIR}/ffx_cas.h
 )
@@ -42,23 +44,27 @@ list(APPEND SRC_FILES
     ${SRC_DIR}/AppSetup.cpp
     ${SRC_DIR}/AssetUtil.cpp
     ${SRC_DIR}/CAS.cpp
+    ${SRC_DIR}/Checkerboard.cpp
     ${SRC_DIR}/ConstantBufferManager.cpp
     ${SRC_DIR}/GLTFModel.cpp
     ${SRC_DIR}/SimpleRenderPass.cpp
 )
 
 list(APPEND VSPS_SHADER_FILES
-  ${SHADERS_DIR}/draw_helmet.hlsl
+  ${SHADERS_DIR}/draw_cb.hlsl
+  ${SHADERS_DIR}/draw_standard.hlsl
 )
 
 list(APPEND CS_SHADER_FILES
   ${SHADERS_DIR}/cas.hlsl
+  ${SHADERS_DIR}/checkerboard_upscale.hlsl
   ${SHADERS_DIR}/copy_texture.hlsl
   ${SHADERS_DIR}/image_delta.hlsl
 )
 
 source_group ("Shaders\\VsPs" FILES
   ${VSPS_SHADER_FILES}
+  ${SHADERS_DIR}/draw_shader_core.h
 )
 
 source_group ("Shaders\\Cs" FILES

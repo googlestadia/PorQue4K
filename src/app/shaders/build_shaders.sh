@@ -10,7 +10,7 @@ CAS_INC_DIR=$(realpath --relative-to=${SCRIPT_DIR} ${SRC_DIR}/../../../third_par
 
 echo ${VKEX_INC_DIR}
 
-HLSL_FILES=(draw_helmet.hlsl)
+HLSL_FILES=(draw_cb.hlsl draw_standard.hlsl)
 for src_file in "${HLSL_FILES[@]}"
 do
   echo -e "\nCompiling ${src_file}"
@@ -26,7 +26,7 @@ do
   eval ${cmd} 
 done
 
-HLSL_COMPUTE_FILES=(cas.hlsl copy_texture.hlsl image_delta.hlsl)
+HLSL_COMPUTE_FILES=(cas.hlsl checkerboard_upscale.hlsl copy_texture.hlsl image_delta.hlsl)
 for src_file in "${HLSL_COMPUTE_FILES[@]}"
 do
   echo -e "\nCompiling ${src_file}"

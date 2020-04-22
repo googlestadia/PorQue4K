@@ -42,3 +42,31 @@ void VkexInfoApp::UpdateCASConstants(const VkExtent2D &srcExtent,
   constants.data.const1.b = const1[2];
   constants.data.const1.a = const1[3];
 }
+
+void VkexInfoApp::CASUpscale(vkex::CommandBuffer cmd, uint32_t frame_index)
+{
+    auto& per_frame_data = m_per_frame_datas[frame_index];
+
+    auto cas_dynamic_offset =
+        m_constant_buffer_manager.UploadConstantsToDynamicBuffer(
+            m_cas_upscaling_constants);
+    cmd->CmdBindPipeline(
+        m_generated_shader_states[AppShaderList::UpscalingCAS]
+        .compute_pipeline);
+    std::vector<uint32_t> dynamic_offsets = { cas_dynamic_offset };
+    cmd->CmdBindDescriptorSets(
+        VK_PIPELINE_BIND_POINT_COMPUTE,
+        *(m_generated_shader_states[AppShaderList::UpscalingCAS]
+            .pipeline_layout),
+        0, { *(m_generated_shader_states[AppShaderList::UpscalingCAS]
+                  .descriptor_sets[frame_index]) },
+        &dynamic_offsets);
+
+    IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kUpscaleInternal);
+    {
+        VkExtent2D extent = GetTargetResolutionExtent();
+        cmd->CmdDispatch((extent.width + 15) >> 4, (extent.height + 15) >> 4,
+            1);
+    }
+    IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kUpscaleInternal);
+}

@@ -95,8 +95,14 @@ file(TO_NATIVE_PATH ${DXC_PATH} DXC_PATH)
 
 message("Using DXC: ${DXC_PATH}")
 
+# TODO: Do I want to convert add_custom_command to
+# add_custom_target in order to properly manage
+# dependencies?
+
 function(compile_hlsl_vs_ps hlsl_path output_dir working_dir)
   #message("${hlsl_path}")
+  get_filename_component(SHADER_DIR ${hlsl_path} DIRECTORY)
+  file(TO_NATIVE_PATH ${SHADER_DIR} SHADER_DIR)
   string(REPLACE "hlsl" "vs.spv" vs_file ${hlsl_path})
   string(REPLACE "hlsl" "ps.spv" ps_file ${hlsl_path})
   get_filename_component(vs_file ${vs_file} NAME)
@@ -106,10 +112,11 @@ function(compile_hlsl_vs_ps hlsl_path output_dir working_dir)
   file(TO_NATIVE_PATH ${working_dir} INCLUDE_PATH)
   #message("${vs_file} ${ps_file}")
   add_custom_command(
-    COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -T vs_6_0 -spirv -E vsmain -Fo ${vs_file} ${hlsl_path}
+    COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -I ${SHADER_DIR} -T vs_6_0 -spirv -E vsmain -Fo ${vs_file} ${hlsl_path}
     COMMAND ${CMAKE_COMMAND} -E echo "Compiling VS ${hlsl_path} to ${vs_file}"
-    COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -T ps_6_0 -spirv -E psmain -Fo ${ps_file} ${hlsl_path}
+    COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -I ${SHADER_DIR} -T ps_6_0 -spirv -E psmain -Fo ${ps_file} ${hlsl_path}
     COMMAND ${CMAKE_COMMAND} -E echo "Compiling PS ${hlsl_path} to ${ps_file}"
+    IMPLICIT_DEPENDS CXX ${hlsl_path}
     MAIN_DEPENDENCY ${hlsl_path}
     OUTPUT ${vs_file} ${ps_file}
     WORKING_DIRECTORY ${working_dir}
@@ -125,6 +132,7 @@ function(compile_hlsl_cs hlsl_path output_dir working_dir addl_incl_dir)
   add_custom_command(
     COMMAND ${DXC_PATH} -I ${INCLUDE_PATH} -I ${addl_incl_dir} -T cs_6_0 -spirv -E csmain -Fo ${cs_file} ${hlsl_path}
     COMMAND ${CMAKE_COMMAND} -E echo "Compiling VS ${hlsl_path} to ${cs_file}"
+    IMPLICIT_DEPENDS CXX ${hlsl_path}
     MAIN_DEPENDENCY ${hlsl_path}
     OUTPUT ${cs_file}
     WORKING_DIRECTORY ${working_dir}

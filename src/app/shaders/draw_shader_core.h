@@ -33,6 +33,13 @@
 //     https://google.github.io/filament/Filament.html
 
 #include "ConstantBufferStructs.h"
+#include "SharedShaderConstants.h"
+
+// TODO: I need to figure out how to trigger re-compiles
+// when headers change. The custom build rules don't seem
+// to exercise the same dependency analysis...
+
+// TODO: Do I want to hoist texture access into a shared function?
 
 struct VSInput
 {
@@ -48,6 +55,29 @@ struct VSOutput
     float3 Normal : NORMAL;
     float2 UV0 : TEXCOORD0;
 };
+
+#if defined (ENABLE_SAMPLE_LOCATION_SHADING)
+struct PSInput
+{
+    // These parameters require the `sample`
+    // interpolation modifier in order to generate
+    // the correct values for checkerboard.
+    sample float4 PositionCS : SV_Position;
+    sample float3 PositionWS : WORLDPOS;
+    sample float3 Normal : NORMAL;
+    sample float2 UV0 : TEXCOORD0;
+
+    uint sampleIndex : SV_SampleIndex;
+};
+#else //defined (ENABLE_SAMPLE_LOCATION_SHADING)
+struct PSInput
+{
+    float4 PositionCS : SV_Position;
+    float3 PositionWS : WORLDPOS;
+    float3 Normal : NORMAL;
+    float2 UV0 : TEXCOORD0;
+};
+#endif //defined (ENABLE_SAMPLE_LOCATION_SHADING)
 
 ConstantBuffer<PerFrameConstantData> PerFrame : register(b0);
 ConstantBuffer<PerObjectConstantData> PerObject : register(b1);
@@ -103,7 +133,7 @@ Texture2D<float4> emissiveTexture : register(t5);
 Texture2D<float4> occlusionTexture : register(t6);
 Texture2D<float4> normalTexture : register(t7);
 
-float3 GetNormal(VSOutput input)
+float3 GetNormal(PSInput input, float2 tdx, float2 tdy)
 {
     // TODO: Use input tangent space if available
     // TODO: Generate basis  normal without vertex normals
@@ -125,8 +155,11 @@ float3 GetNormal(VSOutput input)
     
     // if we generate ng from derivatives, normalize
     //float3 n = normalize(tbn[2].xyz);
-	
+#if defined(ENABLE_MANUAL_GRADIENTS)
+    float3 n = normalTexture.SampleGrad(texSampler, input.UV0, tdx, tdy).rgb;
+#else
     float3 n = normalTexture.Sample(texSampler, input.UV0).rgb;
+#endif
     n = normalize(mul(transpose(tbn), ((2.0 * n - 1.0))));
 	
     return n;
@@ -230,14 +263,14 @@ float3 GetPointShade(float3 pointToLight, MaterialInfo materialInfo, float3 norm
     return float3(0.0, 0.0, 0.0);
 }
 
-float3 CalcDirectionalLightContrib(VSOutput input, GPULightInfo light, MaterialInfo materialInfo, float3 normal, float3 view)
+float3 CalcDirectionalLightContrib(PSInput input, GPULightInfo light, MaterialInfo materialInfo, float3 normal, float3 view)
 {
     float3 pointToLight = light.direction;
     float3 shade = GetPointShade(pointToLight, materialInfo, normal, view);
     return light.intensity * light.color * shade;
 }
 
-float4 psmain(VSOutput input) : SV_Target
+float4 psmain(PSInput input) : SV_Target
 {
     float perceptualRoughness = 0.0;
     float metallic = 0.0;
@@ -247,6 +280,20 @@ float4 psmain(VSOutput input) : SV_Target
     // TODO: Manipulate via constant if not available from material?
     float3 f0 = float3(0.04, 0.04, 0.04);
 	
+    float2 tdx = float2(0.0f, 0.0f);
+    float2 tdy = float2(0.0f, 0.0f);
+#if defined(ENABLE_MANUAL_GRADIENTS)
+  #if (CB_RESOLVE_DEBUG > 0)
+    tdx = ddx_fine(input.UV0) * PerFrame.texGradScaler;
+    tdy = ddy_fine(input.UV0) * PerFrame.texGradScaler;
+  #else
+    tdx = ddx_fine(input.UV0) * GRADIENT_SCALING_FACTOR;
+    tdy = ddy_fine(input.UV0) * GRADIENT_SCALING_FACTOR;
+  #endif
+#endif // defined(ENABLE_MANUAL_GRADIENTS)
+
+    // TODO: Create function to route samples through
+
 	// TODO: Support KHR_materials_pbrSpecularGlossiness?
 	
     const float metallicFactor = PerObject.metallicFactor;
@@ -254,7 +301,11 @@ float4 psmain(VSOutput input) : SV_Target
 	
     // https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#pbrmetallicroughnessmetallicroughnesstexture
     // "The metalness values are sampled from the B channel. The roughness values are sampled from the G channel."
+#if defined(ENABLE_MANUAL_GRADIENTS)
+    float4 metallicRoughness = metallicRoughnessTexture.SampleGrad(texSampler, input.UV0, tdx, tdy);
+#else
     float4 metallicRoughness = metallicRoughnessTexture.Sample(texSampler, input.UV0);
+#endif
     perceptualRoughness = metallicRoughness.g * roughnessFactor;
     metallic = metallicRoughness.b * metallicFactor;
 	
@@ -262,7 +313,11 @@ float4 psmain(VSOutput input) : SV_Target
     metallic = saturate(metallic);
 	
     const float4 baseColorFactor = PerObject.baseColorFactor;
+#if defined(ENABLE_MANUAL_GRADIENTS)
+    baseColor = baseColorTexture.SampleGrad(texSampler, input.UV0, tdx, tdy);
+#else
     baseColor = baseColorTexture.Sample(texSampler, input.UV0);
+#endif
     baseColor *= baseColorFactor;
 	
     // https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#metallic-roughness-material
@@ -281,7 +336,7 @@ float4 psmain(VSOutput input) : SV_Target
     // https://google.github.io/filament/Filament.html#lighting/occlusion/specularocclusion
     float3 specularEnvironmentR90 = float3(1.0, 1.0, 1.0) * clamp(reflectance * 50.0, 0.0, 1.0);
 	
-    float3 normal = GetNormal(input);
+    float3 normal = GetNormal(input, tdx, tdy);
     float3 view = normalize(PerFrame.cameraPos.xyz - input.PositionWS);
     float3 color = float3(0.0, 0.0, 0.0);
 	
@@ -311,21 +366,34 @@ float4 psmain(VSOutput input) : SV_Target
 
     // TODO: occlusion strength constant, controlled by debug slider	
     float ao = 1.0f;
+#if defined(ENABLE_MANUAL_GRADIENTS)
+    ao = occlusionTexture.SampleGrad(texSampler, input.UV0, tdx, tdy).r;
+#else
     ao = occlusionTexture.Sample(texSampler, input.UV0).r;
+#endif
     color *= ao;
 	
 	// TODO: Load frame emissive factors
     const float3 objectEmissiveFactor = PerObject.emissiveFactor;
     const float frameEmissiveFactor = 1.f;
+#if defined(ENABLE_MANUAL_GRADIENTS)
+    float3 emissive = (emissiveTexture.SampleGrad(texSampler, input.UV0, tdx, tdy)).rgb * objectEmissiveFactor.rgb * frameEmissiveFactor;
+#else
     float3 emissive = (emissiveTexture.Sample(texSampler, input.UV0)).rgb * objectEmissiveFactor.rgb * frameEmissiveFactor;
+#endif
     color += emissive;
 
     float4 outColor = float4(color, baseColor.a);
-	
+
 	// TODO: Define debug outputs
     //{
         // Texture coordinates
         //return float4(input.UV0.x, input.UV0.y, 0.f, 1);
+
+        // Texture gradients
+//#if defined(ENABLE_MANUAL_GRADIENTS)
+        //return float4(tdy.x * 100.f, tdy.y * 100.f, 0.f, 1.f);
+//#endif   
     
         // Input vertex normal
         //return float4(input.Normal.x, input.Normal.y, input.Normal.z, 1);

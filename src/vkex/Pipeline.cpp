@@ -399,8 +399,8 @@ vkex::Result CGraphicsPipeline::InitializeMultisample()
 {
   m_vk_pipeline_multisample.flags                  = 0;
   m_vk_pipeline_multisample.rasterizationSamples   = m_create_info.samples;
-  m_vk_pipeline_multisample.sampleShadingEnable    = VK_FALSE;
-  m_vk_pipeline_multisample.minSampleShading       = 0.0f;
+  m_vk_pipeline_multisample.sampleShadingEnable    = m_create_info.sample_shading_enable;
+  m_vk_pipeline_multisample.minSampleShading       = m_create_info.min_sample_shading_factor;
   m_vk_pipeline_multisample.pSampleMask            = 0;
   m_vk_pipeline_multisample.alphaToCoverageEnable  = VK_FALSE;
   m_vk_pipeline_multisample.alphaToOneEnable       = VK_FALSE;

@@ -1,6 +1,8 @@
 #ifndef __CONSTANT_BUFFER_STRUCTS_H__
 #define __CONSTANT_BUFFER_STRUCTS_H__
 
+#include "SharedShaderConstants.h"
+
 struct GPULightInfo
 {
     float3        direction;
@@ -17,7 +19,11 @@ struct GPULightInfo
 struct PerFrameConstantData {
     float4x4 viewProjectionMatrix;
     float3   cameraPos;
+#if (CB_RESOLVE_DEBUG > 0)
+    float    texGradScaler;
+#else
     int      padding;
+#endif
 
     GPULightInfo dirLight;
 };
@@ -42,11 +48,22 @@ struct ScaledTexCopyDimensionsData {
 
 struct ImageDeltaOptions {
     uint vizMode;
+    float deltaAmplifier;
+    uint2 padding1;
 };
 
 struct CASData {
   uint4 const0;
   uint4 const1;
+};
+
+struct CBResolveData {
+    uint srcWidth, srcHeight;
+    int ulXOffset;
+    int urXOffset;
+    int llXOffset;
+    int lrXOffset;
+    uint2 padding1;
 };
 
 #endif // __CONSTANT_BUFFER_STRUCTS_H__

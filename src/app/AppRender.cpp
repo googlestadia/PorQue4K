@@ -36,7 +36,30 @@ void VkexInfoApp::RenderInternalAndTarget(vkex::CommandBuffer cmd, uint32_t fram
         IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kSceneRenderInternal);
         {
 
-            auto render_pass = m_internal_draw_simple_render_pass.render_pass;
+            vkex::RenderPass render_pass;
+            GeneratedShaderState* pipeline;
+            VkViewport viewport;
+
+            switch (GetUpscalingTechnique()) {
+            case UpscalingTechniqueKey::None:
+            case UpscalingTechniqueKey::CAS: 
+            {
+                render_pass = m_internal_draw_simple_render_pass.render_pass;
+                pipeline = &m_generated_shader_states[AppShaderList::Geometry];
+                viewport = vkex::BuildInvertedYViewport(m_internal_render_area);
+                break;
+            }
+            case UpscalingTechniqueKey::Checkerboard: 
+            {
+                render_pass = m_checkerboard_simple_render_pass[per_frame_data.cb_frame_index].render_pass;
+                pipeline = &m_generated_shader_states[AppShaderList::GeometryCB];
+                viewport = m_cb_viewport;
+                break;
+            }
+            default:
+                VKEX_LOG_ERROR("Internal resolution render failure due to unknown upscaling technique.");
+                break;
+            }
 
             VkClearValue rtv_clear = {};
             VkClearValue dsv_clear = {};
@@ -45,16 +68,18 @@ void VkexInfoApp::RenderInternalAndTarget(vkex::CommandBuffer cmd, uint32_t fram
             std::vector<VkClearValue> clear_values = { rtv_clear, dsv_clear };
             cmd->CmdBeginRenderPass(render_pass, &clear_values);
 
-            cmd->CmdSetViewport(m_internal_render_area);
+            std::vector<VkViewport> vps = { viewport };
+            cmd->CmdSetViewport(0, &vps);
+
             cmd->CmdSetScissor(m_internal_render_area);
 
-            cmd->CmdBindPipeline(m_generated_shader_states[AppShaderList::Geometry].graphics_pipeline);
+            cmd->CmdBindPipeline(pipeline->graphics_pipeline);
 
-            std::vector<uint32_t> dynamic_offsets = { per_frame_dynamic_offset,  per_object_dynamic_offset };
+            std::vector<uint32_t> dynamic_offsets = { per_frame_dynamic_offset, per_object_dynamic_offset };
             cmd->CmdBindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS,
-                *(m_generated_shader_states[AppShaderList::Geometry].pipeline_layout),
+                *(pipeline->pipeline_layout),
                 0,
-                { *(m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]) },
+                { *(pipeline->descriptor_sets[frame_index]) },
                 &dynamic_offsets);
 
             DrawModel(cmd);
@@ -72,6 +97,38 @@ void VkexInfoApp::RenderInternalAndTarget(vkex::CommandBuffer cmd, uint32_t fram
     cmd->End();
 }
 
+void VkexInfoApp::NaiveUpscale(vkex::CommandBuffer cmd, uint32_t frame_index)
+{
+    auto& per_frame_data = m_per_frame_datas[frame_index];
+
+    auto scaled_copy_dynamic_offset =
+        m_constant_buffer_manager.UploadConstantsToDynamicBuffer(
+            m_internal_to_target_scaled_copy_constants);
+
+    cmd->CmdBindPipeline(
+        m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy].compute_pipeline);
+
+    std::vector<uint32_t> dynamic_offsets = { scaled_copy_dynamic_offset };
+    cmd->CmdBindDescriptorSets(
+        VK_PIPELINE_BIND_POINT_COMPUTE,
+        *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy]
+            .pipeline_layout),
+        0, { *(m_generated_shader_states
+                  [AppShaderList::InternalToTargetScaledCopy]
+                      .descriptor_sets[frame_index]) },
+        &dynamic_offsets);
+
+    IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kUpscaleInternal);
+    {
+        vkex::uint3 dispatchDims = CalculateSimpleDispatchDimensions(
+            m_generated_shader_states
+            [AppShaderList::InternalToTargetScaledCopy],
+            GetTargetResolutionExtent());
+        cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
+    }
+    IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kUpscaleInternal);
+}
+
 void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t frame_index)
 {
     auto& per_frame_data = m_per_frame_datas[frame_index];
@@ -83,61 +140,20 @@ void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t fram
 
     switch (GetUpscalingTechnique()) {
     case UpscalingTechniqueKey::None: {
-      auto scaled_copy_dynamic_offset =
-          m_constant_buffer_manager.UploadConstantsToDynamicBuffer(
-              m_internal_to_target_scaled_copy_constants);
-      cmd->CmdBindPipeline(
-          m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy]
-              .compute_pipeline);
-      std::vector<uint32_t> dynamic_offsets = {scaled_copy_dynamic_offset};
-      cmd->CmdBindDescriptorSets(
-          VK_PIPELINE_BIND_POINT_COMPUTE,
-          *(m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy]
-                .pipeline_layout),
-          0, {*(m_generated_shader_states
-                    [AppShaderList::InternalToTargetScaledCopy]
-                        .descriptor_sets[frame_index])},
-          &dynamic_offsets);
-
-      IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kUpscaleInternal);
-      {
-        vkex::uint3 dispatchDims = CalculateSimpleDispatchDimensions(
-            m_generated_shader_states
-                [AppShaderList::InternalToTargetScaledCopy],
-            GetTargetResolutionExtent());
-        cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
-      }
-      IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kUpscaleInternal);
-      break;
+        NaiveUpscale(cmd, frame_index);
+        break;
     }
     case UpscalingTechniqueKey::CAS: {
-      auto cas_dynamic_offset =
-          m_constant_buffer_manager.UploadConstantsToDynamicBuffer(
-              m_cas_upscaling_constants);
-      cmd->CmdBindPipeline(
-          m_generated_shader_states[AppShaderList::UpscalingCAS]
-              .compute_pipeline);
-      std::vector<uint32_t> dynamic_offsets = {cas_dynamic_offset};
-      cmd->CmdBindDescriptorSets(
-          VK_PIPELINE_BIND_POINT_COMPUTE,
-          *(m_generated_shader_states[AppShaderList::UpscalingCAS]
-                .pipeline_layout),
-          0, {*(m_generated_shader_states[AppShaderList::UpscalingCAS]
-                    .descriptor_sets[frame_index])},
-          &dynamic_offsets);
-
-      IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kUpscaleInternal);
-      {
-        VkExtent2D extent = GetTargetResolutionExtent();
-        cmd->CmdDispatch((extent.width + 15) >> 4, (extent.height + 15) >> 4,
-                         1);
-      }
-      IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kUpscaleInternal);
-      break;
+        CASUpscale(cmd, frame_index);
+        break;
+    }
+    case UpscalingTechniqueKey::Checkerboard: {
+        CheckerboardUpscale(cmd, frame_index);
+        break;
     }
     default:
+        VKEX_LOG_ERROR("Upscaling failure due to unknown upscaling technique.");
       break;
-      // ERROR: unrecognized technique
     }
     cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -211,7 +227,7 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t
     cmd->CmdTransitionImageLayout(m_target_texture,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_IMAGE_LAYOUT_GENERAL,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
     cmd->CmdTransitionImageLayout(m_internal_as_target_draw_simple_render_pass.rtv_texture,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,

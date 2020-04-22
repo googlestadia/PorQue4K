@@ -25,6 +25,7 @@ RWTexture2D<float4> out_texture : register(u4);
 
 static const float3 luma_consts = float3(0.2126, 0.7152, 0.0722);
 
+// TODO: Merge this with DeltaVisualizerMode, put into SharedShaderConstants.h
 static const uint kDisabledViz = 0;
 static const uint kLumaDelta = 1;
 static const uint kRGBDelta = 2;
@@ -57,6 +58,9 @@ void csmain(uint3 dispatch_id : SV_DispatchThreadID)
         outColor = internalPixel.rgb;
     }
 
+    if (kDisabledViz != Options.vizMode) {
+        outColor *= Options.deltaAmplifier;
+    }
 
     out_texture[dispatch_id.xy] = float4(outColor, 0.f);
 }

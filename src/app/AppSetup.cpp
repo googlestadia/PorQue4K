@@ -82,6 +82,26 @@ void VkexInfoApp::SetupImagesAndRenderPasses(const VkExtent2D present_extent,
             VK_IMAGE_LAYOUT_GENERAL,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT));
     }
+
+    {
+        auto checkerboard_width = present_extent.width / 2;
+        auto checkerboard_height = present_extent.height / 2;
+        VKEX_CALL(CreateSimpleMSRenderPass(
+            GetDevice(),
+            GetGraphicsQueue(),
+            checkerboard_width, checkerboard_height,
+            color_format, depth_format,
+            VK_SAMPLE_COUNT_2_BIT,
+            &m_checkerboard_simple_render_pass[0]));
+
+        VKEX_CALL(CreateSimpleMSRenderPass(
+            GetDevice(),
+            GetGraphicsQueue(),
+            checkerboard_width, checkerboard_height,
+            color_format, depth_format,
+            VK_SAMPLE_COUNT_2_BIT,
+            &m_checkerboard_simple_render_pass[1]));
+    }
 }
 
 void ConfigureDynamicUbos(vkex::DescriptorSetLayoutCreateInfo& create_info)

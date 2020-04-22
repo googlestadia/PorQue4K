@@ -578,18 +578,7 @@ void CCommandBuffer::CmdSetViewport(uint32_t firstViewport, const std::vector<Vk
 
 void CCommandBuffer::CmdSetViewport(const VkRect2D& area, float minDepth, float maxDepth)
 {
-  float x       = static_cast<float>(area.offset.x);
-  float y       = static_cast<float>(area.offset.y);
-  float width   = static_cast<float>(area.extent.width);
-  float height  = static_cast<float>(area.extent.height);
-
-  VkViewport view_port = {};
-  view_port.x        = x;
-  view_port.y        = height;
-  view_port.width    = width;
-  view_port.height   = -height;
-  view_port.minDepth = minDepth;
-  view_port.maxDepth = maxDepth;
+  VkViewport view_port = BuildInvertedYViewport(area, minDepth, maxDepth);
   this->CmdSetViewport(0, 1, &view_port);
 }
 

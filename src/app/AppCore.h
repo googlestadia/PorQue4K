@@ -21,6 +21,7 @@
 
 #include "ConstantBufferManager.h"
 #include "GLTFModel.h"
+#include "SharedShaderConstants.h"
 #include "SimpleRenderPass.h"
 
 using float2 = vkex::float2;
@@ -43,6 +44,7 @@ using PerObjectConstants = vkex::ConstantBufferData<PerObjectConstantData>;
 using ScaledTexCopyDimsConstants = vkex::ConstantBufferData<ScaledTexCopyDimensionsData>;
 using ImageDeltaOptionsConstants = vkex::ConstantBufferData<ImageDeltaOptions>;
 using CASUpscalingConstants = vkex::ConstantBufferData<CASData>;
+using CBUpscalingConstants = vkex::ConstantBufferData<CBResolveData>;
 
 enum ShaderPipelineType {
     Graphics = 0,
@@ -55,6 +57,8 @@ enum AppShaderList {
     InternalTargetImageDelta = 2,
     TargetToPresentScaledCopy = 3,
     UpscalingCAS = 4,
+    CheckerboardUpscale = 5,
+    GeometryCB = 6,
     NumTypes,
 };
 
@@ -100,6 +104,7 @@ struct CPULightInfo {
 enum UpscalingTechniqueKey {
     None = 0,
     CAS = 1,
+    Checkerboard = 2,
     kuCount,
 };
 
@@ -110,6 +115,12 @@ enum ResolutionInfoKey {
     kr1440p = 3,
     kr2160p = 4,
     krCount,
+};
+
+enum CBResolutionInfoKey {
+    kcb1080CB = 0,
+    kcb2160CB = 1,
+    kcbCount,
 };
 
 enum TargetResolutionKey {
@@ -153,6 +164,9 @@ struct PerFrameData {
     bool timestamps_readback = false;
 
     std::vector<GpuTimerInfo> issued_gpu_timers;
+
+    uint32_t cb_frame_index;
+
     // TODO: Other stuff that might need to be inspected from previous
     // frames, such as targeted resolution or previous frame images
 };
@@ -191,6 +205,7 @@ protected:
     void BuildUpscalingTechniqueList(
         std::vector<const char *> &upscaling_technique_list);
     void BuildInternalResolutionTextList(std::vector<const char*>& internal_text_list);
+    void BuildCBResolutionTextList(std::vector<const char*>& internal_text_list);
     void BuildTargetResolutionTextList(std::vector<const char*>& target_text_list);
 
     void IssueGpuTimeStart(vkex::CommandBuffer cmd, PerFrameData& per_frame_data, TimerTag tag);
@@ -200,17 +215,22 @@ protected:
 
     GPULightInfo ConvertCPULightInfoToGPULightInfo(CPULightInfo& cpuLight);
     void UpdateMaterialConstants();
+    void UpdateImageDeltaConstants();
+    void UpdateDebugConstants();
 
-    // TODO: This is very informal because the TG size doesn't necessarily 
-    // mean it represents 1 output pixel per thread
-    vkex::uint3 CalculateSimpleDispatchDimensions(GeneratedShaderState& gen_shader_state, VkExtent2D dest_image_extent);
+    vkex::uint3 CalculateSimpleDispatchDimensions(GeneratedShaderState& gen_shader_state, VkExtent2D image_extent);
 
     ImVec2 GetSuggestedGUISize();
     float GetSuggestedFontScale();
     void DrawAppInfoGUI(uint32_t frame_index);
 
+    void CheckVulkanFeaturesForPipelines();
+
     // AppRender.cpp
     void RenderInternalAndTarget(vkex::CommandBuffer cmd, uint32_t frame_index);
+    void NaiveUpscale(vkex::CommandBuffer cmd, uint32_t frame_index);
+    void CASUpscale(vkex::CommandBuffer cmd, uint32_t frame_index);
+    void CheckerboardUpscale(vkex::CommandBuffer cmd, uint32_t frame_index);
     void UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t frame_index);
     void VisualizeInternalTargetDelta(vkex::CommandBuffer cmd, uint32_t frame_index);
 
@@ -228,6 +248,10 @@ protected:
         const VkExtent2D &dstExtent, const float sharpness,
         CASUpscalingConstants &constants);
 
+    // Checkerboard.cpp
+    void UpdateCheckerboardConstants(const VkExtent2D &dstExtent,
+        CBUpscalingConstants &constants);
+
 private:
 
     // CPU side state
@@ -243,28 +267,39 @@ private:
     ScaledTexCopyDimsConstants  m_internal_to_target_scaled_copy_constants = {};
     ImageDeltaOptionsConstants  m_image_delta_options_constants = {};
     ScaledTexCopyDimsConstants  m_target_to_present_scaled_copy_constants = {};
-    CASUpscalingConstants m_cas_upscaling_constants = {};
+    CASUpscalingConstants       m_cas_upscaling_constants = {};
+    CBUpscalingConstants        m_cb_upscaling_constants = {};
 
     SimpleRenderPass            m_internal_draw_simple_render_pass = {};
     SimpleRenderPass            m_internal_as_target_draw_simple_render_pass = {};
+    SimpleRenderPass            m_checkerboard_simple_render_pass[2];
     vkex::Texture               m_target_texture = nullptr;
     vkex::Texture               m_visualization_texture = nullptr;
 
     // TODO: Handle dynamic resolution?
 
-    UpscalingTechniqueKey m_upscaling_technique_key =
-        UpscalingTechniqueKey::None;
-    PresentResolutionKey             m_present_resolution_key = PresentResolutionKey::kpCount;
-    TargetResolutionKey              m_target_resolution_key = TargetResolutionKey::ktCount;
-    ResolutionInfoKey                m_internal_resolution_key = ResolutionInfoKey::krCount;
-    uint32_t m_selected_upscaling_technique_index = UINT32_MAX;
-    uint32_t                         m_selected_internal_resolution_index = UINT32_MAX;
-    uint32_t                         m_selected_target_resolution_index = UINT32_MAX;
+    UpscalingTechniqueKey       m_upscaling_technique_key = UpscalingTechniqueKey::None;
+    PresentResolutionKey        m_present_resolution_key = PresentResolutionKey::kpCount;
+    ResolutionInfoKey           m_internal_resolution_key = ResolutionInfoKey::krCount;
+    CBResolutionInfoKey         m_internal_cb_resolution_key = CBResolutionInfoKey::kcbCount;
+    TargetResolutionKey         m_target_resolution_key = TargetResolutionKey::ktCount;
+    uint32_t                    m_selected_upscaling_technique_index = UINT32_MAX;
+    uint32_t                    m_selected_internal_resolution_index = UINT32_MAX;
+    uint32_t                    m_selected_cb_internal_resolution_index = UINT32_MAX;
+    uint32_t                    m_selected_target_resolution_index = UINT32_MAX;
 
-    VkRect2D                         m_internal_render_area = {};
-    VkRect2D                         m_target_render_area = {};
+    VkRect2D                    m_internal_render_area = {};
+    VkRect2D                    m_target_render_area = {};
 
-    DeltaVisualizerMode              m_delta_visualizer_mode = kDisabled;
+    VkViewport                  m_cb_viewport = {};
+    float                       m_texture_gradient_scaler = 0.5f;
+    int32_t                     m_cb_upper_left_XOffset = 0;
+    int32_t                     m_cb_upper_right_XOffset = 0;
+    int32_t                     m_cb_lower_left_XOffset = 0;
+    int32_t                     m_cb_lower_right_XOffset = 0;
+
+    DeltaVisualizerMode         m_delta_visualizer_mode = kDisabled;
+    float                       m_delta_amplifier = 1.0f;
 
     // TODO: Eventually this becomes a list of models (somewhere) and a pointer for the active model
     GLTFModel                        m_helmet_model;

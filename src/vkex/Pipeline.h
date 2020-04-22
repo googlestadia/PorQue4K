@@ -248,6 +248,9 @@ struct GraphicsPipelineCreateInfo {
 
   std::vector<VkFormat>                 rtv_formats;
   VkFormat                              dsv_format;
+
+  VkBool32                              sample_shading_enable = false;
+  float                                 min_sample_shading_factor = 0.0f;
 };
 
 /** @class IGraphicsPipeline

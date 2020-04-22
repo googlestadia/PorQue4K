@@ -38,10 +38,17 @@ struct ResolutionInfo {
     std::string text;
 };
 
+struct CBResolutionInfo {
+    CBResolutionInfoKey id;
+    VkExtent2D resolution_extent;
+    std::string text;
+};
+
 struct TargetResolutionChain {
     TargetResolutionKey id;
     ResolutionInfoKey resolution_info_key;
     std::vector<ResolutionInfoKey> internal_resolution_info_keys;
+    CBResolutionInfoKey checkerboard_resolution_info_key;
 };
 
 struct PresentResolutionChain {
@@ -54,6 +61,7 @@ static UpscalingTechniqueInfo
 s_upscaling_techniques[UpscalingTechniqueKey::kuCount] = {
     {UpscalingTechniqueKey::None, "None"},
     {UpscalingTechniqueKey::CAS, "FidelityFX CAS"},
+    {UpscalingTechniqueKey::Checkerboard, "Checkerboard"},
 };
 
 static ResolutionInfo s_resolution_infos[ResolutionInfoKey::krCount] = {
@@ -74,12 +82,27 @@ static ResolutionInfo s_resolution_infos[ResolutionInfoKey::krCount] = {
     },
 };
 
-static TargetResolutionChain s_target_resolutions[TargetResolutionKey::ktCount] = {
+static CBResolutionInfo s_cb_resolution_infos[CBResolutionInfoKey::kcbCount] = {
     {
-        TargetResolutionKey::kt1080p, ResolutionInfoKey::kr1080p, {ResolutionInfoKey::kr1080p, ResolutionInfoKey::kr720p, ResolutionInfoKey::kr540p}
+        CBResolutionInfoKey::kcb1080CB, {960, 540}, "1080p CB"
     },
     {
-        TargetResolutionKey::kt2160p, ResolutionInfoKey::kr2160p, {ResolutionInfoKey::kr2160p, ResolutionInfoKey::kr1440p, ResolutionInfoKey::kr1080p}
+        CBResolutionInfoKey::kcb2160CB, {1920, 1080}, "2160p CB"
+    },
+};
+
+static TargetResolutionChain s_target_resolutions[TargetResolutionKey::ktCount] = {
+    {
+        TargetResolutionKey::kt1080p,
+        ResolutionInfoKey::kr1080p, 
+        {ResolutionInfoKey::kr1080p, ResolutionInfoKey::kr720p, ResolutionInfoKey::kr540p},
+        CBResolutionInfoKey::kcb1080CB,
+    },
+    {
+        TargetResolutionKey::kt2160p, 
+        ResolutionInfoKey::kr2160p, 
+        {ResolutionInfoKey::kr2160p, ResolutionInfoKey::kr1440p, ResolutionInfoKey::kr1080p},
+        CBResolutionInfoKey::kcb2160CB,
     },
 };
 
@@ -117,7 +140,8 @@ void VkexInfoApp::SetPresentResolution(PresentResolutionKey new_present_resoluti
     m_target_resolution_key = s_present_resolutions[m_present_resolution_key].target_resolution_keys[m_selected_target_resolution_index];
 
     m_selected_internal_resolution_index = 0;
-    m_internal_resolution_key = s_target_resolutions[m_target_resolution_key].internal_resolution_info_keys[m_selected_internal_resolution_index];
+    m_selected_cb_internal_resolution_index = 0;
+    UpdateInternalResolutionState();
 }
 
 void VkexInfoApp::UpdateTargetResolutionState()
@@ -128,6 +152,7 @@ void VkexInfoApp::UpdateTargetResolutionState()
 
     if (old_key != m_target_resolution_key) {
         m_selected_internal_resolution_index = 0;
+        m_selected_cb_internal_resolution_index = 0;
         UpdateInternalResolutionState();
     }
 }
@@ -135,6 +160,7 @@ void VkexInfoApp::UpdateTargetResolutionState()
 void VkexInfoApp::UpdateInternalResolutionState()
 {
     m_internal_resolution_key = s_target_resolutions[m_target_resolution_key].internal_resolution_info_keys[m_selected_internal_resolution_index];
+    m_internal_cb_resolution_key = s_target_resolutions[m_target_resolution_key].checkerboard_resolution_info_key;
 }
 
 void VkexInfoApp::UpdateUpscalingTechniqueState() {
@@ -152,7 +178,26 @@ const char *VkexInfoApp::GetUpscalingTechniqueText() {
 
 VkExtent2D VkexInfoApp::GetInternalResolutionExtent()
 {
-    return s_resolution_infos[m_internal_resolution_key].resolution_extent;
+    VkExtent2D extent = {};
+
+    switch (GetUpscalingTechnique()) {
+    case UpscalingTechniqueKey::None:
+    case UpscalingTechniqueKey::CAS:
+    {
+        extent = s_resolution_infos[m_internal_resolution_key].resolution_extent;
+        break;
+    }
+    case UpscalingTechniqueKey::Checkerboard:
+    {
+        extent = s_cb_resolution_infos[m_internal_cb_resolution_key].resolution_extent;
+        break;
+    }
+    default:
+        VKEX_LOG_ERROR("Internal resolution generation failure due to unknown upscaling technique.");
+        break;
+    }
+
+    return extent;
 }
 
 VkExtent2D VkexInfoApp::GetTargetResolutionExtent()
@@ -192,6 +237,13 @@ void VkexInfoApp::BuildInternalResolutionTextList(std::vector<const char*>& inte
         auto& res_info = s_resolution_infos[internal_resolution];
         internal_text_list.push_back(res_info.text.c_str());
     }
+}
+
+void VkexInfoApp::BuildCBResolutionTextList(std::vector<const char*>& internal_text_list)
+{
+    auto cb_resolution = s_target_resolutions[m_target_resolution_key].checkerboard_resolution_info_key;
+    auto& res_info = s_cb_resolution_infos[cb_resolution];
+    internal_text_list.push_back(res_info.text.c_str());
 }
 
 void VkexInfoApp::BuildTargetResolutionTextList(std::vector<const char*>& target_text_list)
@@ -262,14 +314,14 @@ double VkexInfoApp::CalculateGpuTimeRange(const PerFrameData& per_frame_data, Ti
     return (gpu_ticks * timestamp_period * nano_scaler);
 }
 
-vkex::uint3 VkexInfoApp::CalculateSimpleDispatchDimensions(GeneratedShaderState& gen_shader_state, VkExtent2D dest_image_extent)
+vkex::uint3 VkexInfoApp::CalculateSimpleDispatchDimensions(GeneratedShaderState& gen_shader_state, VkExtent2D image_extent)
 {
     auto tg_dims = gen_shader_state.program->GetInterface().GetThreadgroupDimensions();
 
     vkex::uint3 dispatch_dims = { 0, 0, 1 };
 
-    dispatch_dims.x = uint32_t(ceil((float(dest_image_extent.width) / tg_dims.x)));
-    dispatch_dims.y = uint32_t(ceil((float(dest_image_extent.height) / tg_dims.y)));
+    dispatch_dims.x = uint32_t(ceil((float(image_extent.width) / tg_dims.x)));
+    dispatch_dims.y = uint32_t(ceil((float(image_extent.height) / tg_dims.y)));
 
     return dispatch_dims;
 }
@@ -301,9 +353,29 @@ void VkexInfoApp::UpdateMaterialConstants()
     m_per_object_constants.data.roughnessFactor = m_helmet_model.GetRoughnessFactor(0, 0);
 }
 
+void VkexInfoApp::UpdateImageDeltaConstants()
+{
+    m_image_delta_options_constants.data.deltaAmplifier = m_delta_amplifier;
+
+    VKEX_ASSERT(m_delta_visualizer_mode < DeltaVisualizerMode::kDeltaVizCount);
+    m_image_delta_options_constants.data.vizMode = uint(m_delta_visualizer_mode);
+}
+
+void VkexInfoApp::UpdateDebugConstants()
+{
+#if (CB_RESOLVE_DEBUG > 0)
+    m_per_frame_constants.data.texGradScaler = m_texture_gradient_scaler;
+
+    m_cb_upscaling_constants.data.ulXOffset = m_cb_upper_left_XOffset;
+    m_cb_upscaling_constants.data.urXOffset = m_cb_upper_right_XOffset;
+    m_cb_upscaling_constants.data.llXOffset = m_cb_lower_left_XOffset;
+    m_cb_upscaling_constants.data.lrXOffset = m_cb_lower_right_XOffset;
+#endif
+}
+
 ImVec2 VkexInfoApp::GetSuggestedGUISize()
 {
-    ImVec2 gui_window_size(400, 400);
+    ImVec2 gui_window_size(400, 600);
 
     auto present_extent = GetPresentResolutionExtent();
     if (present_extent.height == 2160) {
@@ -393,13 +465,34 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index)
                 ImGui::NextColumn();
             }
             {
-                std::vector<const char*> resolution_items;
-                BuildInternalResolutionTextList(resolution_items);
+                switch (GetUpscalingTechnique()) {
+                case UpscalingTechniqueKey::None:
+                case UpscalingTechniqueKey::CAS:
+                {
+                    std::vector<const char*> resolution_items;
+                    BuildInternalResolutionTextList(resolution_items);
 
-                ImGui::Text("Internal resolution");
-                ImGui::NextColumn();
-                ImGui::Combo("##InternalRes", (int*)(&m_selected_internal_resolution_index), resolution_items.data(), int(resolution_items.size()));
-                ImGui::NextColumn();
+                    ImGui::Text("Internal resolution");
+                    ImGui::NextColumn();
+                    ImGui::Combo("##InternalRes", (int*)(&m_selected_internal_resolution_index), resolution_items.data(), int(resolution_items.size()));
+                    ImGui::NextColumn();
+                    break;
+                }
+                case UpscalingTechniqueKey::Checkerboard:
+                {
+                    std::vector<const char*> resolution_items;
+                    BuildCBResolutionTextList(resolution_items);
+
+                    ImGui::Text("Checkerboard resolution");
+                    ImGui::NextColumn();
+                    ImGui::Combo("##CheckerboardRes", (int*)(&m_selected_cb_internal_resolution_index), resolution_items.data(), int(resolution_items.size()));
+                    ImGui::NextColumn();
+                    break;
+                }
+                default:
+                    VKEX_LOG_WARN("Internal resolution GUI selection failure due to unknown upscaling technique.");
+                    break;
+                }
             }
             {
                 std::vector<const char*> resolution_items;
@@ -422,6 +515,12 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index)
                 ImGui::Text("Delta Visualizer");
                 ImGui::NextColumn();
                 ImGui::Combo("##DeltaViz", (int*)(&m_delta_visualizer_mode), visualizer_items.data(), int(visualizer_items.size()));
+                ImGui::NextColumn();
+            }
+            {
+                ImGui::Text("Delta Amplifer");
+                ImGui::NextColumn();
+                ImGui::SliderFloat("##DeltaAmplifier", &m_delta_amplifier, 1.f, 500.f);
                 ImGui::NextColumn();
             }
             ImGui::Columns(1);
@@ -482,6 +581,53 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index)
             }
         }
 
+#if (CB_RESOLVE_DEBUG > 0)
+        if (GetUpscalingTechnique() == UpscalingTechniqueKey::Checkerboard)
+        {
+            ImGui::Separator();
+
+            {
+                ImGui::Columns(2);
+                {
+                    ImGui::Text("CB Debug");
+                    ImGui::NextColumn();
+                    ImGui::NextColumn();
+                }
+                {
+                    ImGui::Text("UL Offset");
+                    ImGui::NextColumn();
+                    ImGui::InputInt("##ULOffset", &m_cb_upper_left_XOffset);
+                    ImGui::NextColumn();
+                }
+                {
+                    ImGui::Text("UR Offset");
+                    ImGui::NextColumn();
+                    ImGui::InputInt("##UROffset", &m_cb_upper_right_XOffset);
+                    ImGui::NextColumn();
+                }
+                {
+                    ImGui::Text("LL Offset");
+                    ImGui::NextColumn();
+                    ImGui::InputInt("##LLOffset", &m_cb_lower_left_XOffset);
+                    ImGui::NextColumn();
+                }
+                {
+                    ImGui::Text("LR Offset");
+                    ImGui::NextColumn();
+                    ImGui::InputInt("##LROffset", &m_cb_lower_right_XOffset);
+                    ImGui::NextColumn();
+                }
+                {
+                    ImGui::Text("TexGradientScaler");
+                    ImGui::NextColumn(); 
+                    ImGui::SliderFloat("##TexGradientScaler", &m_texture_gradient_scaler, 0.f, 1.f);
+                    ImGui::NextColumn();
+                }
+                ImGui::Columns(1);
+            }
+        }
+#endif // (CB_RESOLVE_DEBUG > 0)
+
 #if defined(LIGHT_DEBUGGER)
         ImGui::Separator();
         {
@@ -496,8 +642,7 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index)
             std::string light_type_string;
             if (light.lightType == LightType::kDirectional) {
                 light_type_string = "Directional";
-            }
-            else {
+            } else {
                 light_type_string = "UNKNOWN";
             }
             ImGui::Text(light_type_string.c_str());
@@ -650,4 +795,13 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index)
 #endif // defined(GUI_CPU_STATS)
     }
     ImGui::End();
+}
+
+void VkexInfoApp::CheckVulkanFeaturesForPipelines()
+{
+    if (GetDevice()->GetPhysicalDevice()->GetPhysicalDeviceFeatures().features.sampleRateShading == VK_FALSE) {
+        VKEX_LOG_ERROR("sampleRateShading is missing from VkPhysicalDeviceFeatures, Checkerboard Upscale could fail!");
+    }
+
+    // TODO: Validate VK_EXT_sample_locations when we start using it
 }

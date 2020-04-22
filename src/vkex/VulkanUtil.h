@@ -955,6 +955,15 @@ vkex::Result CopyResource(
   uint32_t                 region_count,
   const VkBufferImageCopy* p_regions);
 
+// =================================================================================================
+// Misc Utilities
+// =================================================================================================
+
+VkViewport BuildInvertedYViewport(
+  const VkRect2D& area,
+  float minDepth = 0.0f,
+  float maxDepth = 1.0f);
+
 } // namespace vkex
 
 #endif // __VKEX_VULKAN_UTIL_H__

@@ -16,9 +16,6 @@
 
 #include "AppCore.h"
 
-// TODO: Simplify shader<->app interface management
-// * Shared header for stuff like TG dims
-
 void VkexInfoApp::AddArgs(vkex::ArgParser& args)
 {
     args.AddOptionInt("h", "height", "Height of swapchain image (1080, 2160)", 1080);
@@ -43,11 +40,19 @@ void VkexInfoApp::Configure(const vkex::ArgParser& args, vkex::Configuration& co
     // This really should be configurable, allowing for different uses without
     // touching the vkex lib code.
 
+#if defined(ENABLE_VALIDATION)
+    configuration.graphics_debug.enable = true;
+    configuration.graphics_debug.message_severity.info = true;
+    configuration.graphics_debug.message_severity.warning = true;
+    configuration.graphics_debug.message_severity.error = true;
+    configuration.graphics_debug.message_type.validation = true;
+#else
     configuration.graphics_debug.enable = false;
     configuration.graphics_debug.message_severity.info = false;
     configuration.graphics_debug.message_severity.warning = false;
     configuration.graphics_debug.message_severity.error = false;
     configuration.graphics_debug.message_type.validation = false;
+#endif // defined(ENABLE_VALIDATION)
 
     int32_t requested_height = 1080;
     args.GetInt("h", "height", &requested_height);
@@ -70,6 +75,8 @@ void VkexInfoApp::Configure(const vkex::ArgParser& args, vkex::Configuration& co
 
 void VkexInfoApp::Setup()
 {
+    CheckVulkanFeaturesForPipelines();
+
     {
         auto present_res_key =
             FindPresentResolutionKey(GetConfiguration().window.width);
@@ -102,7 +109,6 @@ void VkexInfoApp::Setup()
         m_upscaling_technique_key = UpscalingTechniqueKey::None;
     }
 
-    // TODO: How we manage images will change with checkerboard...
     SetupImagesAndRenderPasses(GetPresentResolutionExtent(), GetConfiguration().swapchain.color_format, VK_FORMAT_D32_SFLOAT);
 
     // Build pipelines + related state
@@ -119,8 +125,8 @@ void VkexInfoApp::Setup()
             shader_inputs[AppShaderList::Geometry].pipeline_type = ShaderPipelineType::Graphics;
 
             shader_inputs[AppShaderList::Geometry].shader_paths.resize(2);
-            shader_inputs[AppShaderList::Geometry].shader_paths[0] = GetAssetPath("shaders/draw_helmet.vs.spv");
-            shader_inputs[AppShaderList::Geometry].shader_paths[1] = GetAssetPath("shaders/draw_helmet.ps.spv");
+            shader_inputs[AppShaderList::Geometry].shader_paths[0] = GetAssetPath("shaders/draw_standard.vs.spv");
+            shader_inputs[AppShaderList::Geometry].shader_paths[1] = GetAssetPath("shaders/draw_standard.ps.spv");
 
 
             std::vector<vkex::VertexBindingDescription> vertex_buffer_bindings = m_helmet_model.GetVertexBindingDescriptions(0, 0);
@@ -169,6 +175,46 @@ void VkexInfoApp::Setup()
             shader_inputs[AppShaderList::UpscalingCAS].shader_paths[0] =
                 GetAssetPath("shaders/cas.cs.spv");
         }
+        {
+            shader_inputs[AppShaderList::CheckerboardUpscale].pipeline_type = ShaderPipelineType::Compute;
+
+            shader_inputs[AppShaderList::CheckerboardUpscale].shader_paths.resize(1);
+            shader_inputs[AppShaderList::CheckerboardUpscale].shader_paths[0] = GetAssetPath("shaders/checkerboard_upscale.cs.spv");
+        }
+        {
+            
+            shader_inputs[AppShaderList::GeometryCB].pipeline_type = ShaderPipelineType::Graphics;
+
+            shader_inputs[AppShaderList::GeometryCB].shader_paths.resize(2);
+            shader_inputs[AppShaderList::GeometryCB].shader_paths[0] = GetAssetPath("shaders/draw_cb.vs.spv");
+            shader_inputs[AppShaderList::GeometryCB].shader_paths[1] = GetAssetPath("shaders/draw_cb.ps.spv");
+
+
+            std::vector<vkex::VertexBindingDescription> vertex_buffer_bindings = m_helmet_model.GetVertexBindingDescriptions(0, 0);
+            std::vector<VkFormat> vertex_buffer_formats = m_helmet_model.GetVertexBufferFormats(0, 0);
+
+            // TODO: We could have shared constants/defines for the locations?
+            vertex_buffer_bindings[GLTFModel::BufferType::Position].AddAttribute(0, vertex_buffer_formats[GLTFModel::BufferType::Position]);
+            vertex_buffer_bindings[GLTFModel::BufferType::Normal].AddAttribute(1, vertex_buffer_formats[GLTFModel::BufferType::Normal]);
+            vertex_buffer_bindings[GLTFModel::BufferType::TexCoord0].AddAttribute(2, vertex_buffer_formats[GLTFModel::BufferType::TexCoord0]);
+
+            vkex::GraphicsPipelineCreateInfo create_info = {};
+            create_info.vertex_binding_descriptions = vertex_buffer_bindings;
+            
+            // We can enable sample location shading with this, but we still
+            // need to manually enable sample location interpolation
+            // in the PS input structure which makes this almost useless...
+            create_info.samples = VK_SAMPLE_COUNT_2_BIT; 
+            create_info.min_sample_shading_factor = 1.0f;
+            create_info.sample_shading_enable = VK_TRUE;
+
+            create_info.depth_test_enable = true;
+            create_info.depth_write_enable = true;
+            create_info.rtv_formats = { m_checkerboard_simple_render_pass[0].rtv->GetFormat() };
+            create_info.dsv_format = m_checkerboard_simple_render_pass[0].dsv->GetFormat();
+            create_info.render_pass = m_checkerboard_simple_render_pass[0].render_pass;
+            shader_inputs[AppShaderList::GeometryCB].graphics_pipeline_create_info = create_info;
+        }
 
         SetupShaders(shader_inputs, m_generated_shader_states);
     }
@@ -208,6 +254,25 @@ void VkexInfoApp::Setup()
             m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(5, helmet_textures[GLTFModel::MaterialTextureType::Emissive]);
             m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(6, helmet_textures[GLTFModel::MaterialTextureType::Occlusion]);
             m_generated_shader_states[AppShaderList::Geometry].descriptor_sets[frame_index]->UpdateDescriptor(7, helmet_textures[GLTFModel::MaterialTextureType::NormalTex]);
+
+            {
+                m_generated_shader_states[AppShaderList::GeometryCB].descriptor_sets[frame_index]->UpdateDescriptor(0,
+                    m_constant_buffer_manager.GetBuffer(frame_index),
+                    m_per_frame_constants.size);
+                m_generated_shader_states[AppShaderList::GeometryCB].descriptor_sets[frame_index]->UpdateDescriptor(1,
+                    m_constant_buffer_manager.GetBuffer(frame_index),
+                    m_per_object_constants.size);
+
+                // TODO: If models are switching, these updates will have to be per-frame
+                m_generated_shader_states[AppShaderList::GeometryCB].descriptor_sets[frame_index]->UpdateDescriptor(2, helmet_samplers[matComponent]);
+                m_generated_shader_states[AppShaderList::GeometryCB].descriptor_sets[frame_index]->UpdateDescriptor(3, helmet_textures[matComponent]);
+
+                // TODO: I'm assuming the sampler, which is not correct
+                m_generated_shader_states[AppShaderList::GeometryCB].descriptor_sets[frame_index]->UpdateDescriptor(4, helmet_textures[GLTFModel::MaterialTextureType::MetallicRoughness]);
+                m_generated_shader_states[AppShaderList::GeometryCB].descriptor_sets[frame_index]->UpdateDescriptor(5, helmet_textures[GLTFModel::MaterialTextureType::Emissive]);
+                m_generated_shader_states[AppShaderList::GeometryCB].descriptor_sets[frame_index]->UpdateDescriptor(6, helmet_textures[GLTFModel::MaterialTextureType::Occlusion]);
+                m_generated_shader_states[AppShaderList::GeometryCB].descriptor_sets[frame_index]->UpdateDescriptor(7, helmet_textures[GLTFModel::MaterialTextureType::NormalTex]);
+            }
         }
     }
 
@@ -253,6 +318,13 @@ void VkexInfoApp::Setup()
             m_generated_shader_states[AppShaderList::UpscalingCAS]
                 .descriptor_sets[frame_index]
                 ->UpdateDescriptor(2, m_target_texture);
+
+            {
+                m_generated_shader_states[AppShaderList::CheckerboardUpscale].descriptor_sets[frame_index]->UpdateDescriptor(0,
+                    constant_buffer,
+                    m_cb_upscaling_constants.size);
+                m_generated_shader_states[AppShaderList::CheckerboardUpscale].descriptor_sets[frame_index]->UpdateDescriptor(3, m_target_texture);
+            }
         }
     }
 
@@ -276,7 +348,6 @@ void VkexInfoApp::Setup()
             per_frame_data.issued_gpu_timers.resize(TimerTag::kTimerTagCount);
         }
     }
-
 }
 
 void VkexInfoApp::Update(double frame_elapsed_time)
@@ -340,13 +411,29 @@ void VkexInfoApp::Update(double frame_elapsed_time)
     UpdateCASConstants(internal_res_extent, target_res_extent, 1.0f,
         m_cas_upscaling_constants);
 
-    VKEX_ASSERT(m_delta_visualizer_mode < DeltaVisualizerMode::kDeltaVizCount);
-    m_image_delta_options_constants.data.vizMode = uint(m_delta_visualizer_mode);
+    UpdateCheckerboardConstants(internal_res_extent, m_cb_upscaling_constants);
+
+    UpdateImageDeltaConstants();
+
+    UpdateDebugConstants();
 }
 
 void VkexInfoApp::Render(vkex::Application::RenderData* p_data)
 {
     const auto frame_index = p_data->GetFrameIndex();
+
+    uint32_t cb_frame_index = frame_index % 2;
+    m_per_frame_datas[frame_index].cb_frame_index = cb_frame_index;
+
+    // add half pixel offset between frames, since half-pixel in
+    // half-res equals full pixel in full-res 
+    // 'odd' frames will be offset
+    m_cb_viewport = vkex::BuildInvertedYViewport(m_internal_render_area);
+    m_cb_viewport.x += 0.5f * cb_frame_index;
+
+    // TODO: In the future, if we have some temporal technique (TAA or DRS),
+    // we might want to think about using the Viewport to generate the jitter.
+    // Otherwise, the jitter can go into the projection matrix.
 
     m_constant_buffer_manager.NewFrame(frame_index);
 

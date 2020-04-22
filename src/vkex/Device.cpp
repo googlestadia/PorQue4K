@@ -484,6 +484,7 @@ vkex::Result CDevice::InternalCreate(
     m_create_info.enabled_features.occlusionQueryPrecise    = VK_TRUE;
     m_create_info.enabled_features.pipelineStatisticsQuery  = VK_TRUE;
     m_create_info.enabled_features.samplerAnisotropy        = VK_TRUE;
+    m_create_info.enabled_features.sampleRateShading        = VK_TRUE;
   }
 
   // Create info
