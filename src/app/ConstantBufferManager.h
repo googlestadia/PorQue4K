@@ -19,43 +19,45 @@
 
 #include "vkex/Application.h"
 
-class ConstantBufferManager 
-{
-public:
-    ConstantBufferManager() {}
-    virtual ~ConstantBufferManager() {}
+class ConstantBufferManager {
+ public:
+  ConstantBufferManager() {}
+  virtual ~ConstantBufferManager() {}
 
-    vkex::Result Initialize(vkex::Device device, vkex::Queue queue, uint32_t frame_count, size_t per_frame_buffer_size = kDefaultBufferSizeInBytes);
+  vkex::Result Initialize(
+      vkex::Device device, vkex::Queue queue, uint32_t frame_count,
+      size_t per_frame_buffer_size = kDefaultBufferSizeInBytes);
 
-    vkex::Buffer GetBuffer(uint32_t frame_index);
+  vkex::Buffer GetBuffer(uint32_t frame_index);
 
-    void NewFrame(uint32_t new_frame_index);
+  void NewFrame(uint32_t new_frame_index);
 
-    uint32_t UploadToDynamicBuffer(size_t size, const void* p_src);
-    template<typename T>
-    uint32_t UploadConstantsToDynamicBuffer(vkex::ConstantBufferData<T>& constant_buffer_data)
-    {
-        return UploadToDynamicBuffer(constant_buffer_data.size, &constant_buffer_data.data);
-    }
+  uint32_t UploadToDynamicBuffer(size_t size, const void* p_src);
+  template <typename T>
+  uint32_t UploadConstantsToDynamicBuffer(
+      vkex::ConstantBufferData<T>& constant_buffer_data) {
+    return UploadToDynamicBuffer(constant_buffer_data.size,
+                                 &constant_buffer_data.data);
+  }
 
-protected:
+ protected:
+  // TODO: This number is totally magical, and will be
+  // replaced by a value based on actual usage _soon_
+  enum ConstantBufferManagerConstants {
+    kDefaultBufferSizeInBytes = 4 * 1024 * 1024,
+  };
 
-    // TODO: This number is totally magical, and will be 
-    // replaced by a value based on actual usage _soon_
-    enum ConstantBufferManagerConstants {
-        kDefaultBufferSizeInBytes = 4 * 1024 * 1024,
-    };
+  bool AllocDynamicBufferSpace(size_t size, void** out_ptr,
+                               uint32_t& dynamic_offset);
 
-    bool AllocDynamicBufferSpace(size_t size, void** out_ptr, uint32_t& dynamic_offset);
+ private:
+  std::vector<vkex::Buffer> m_dynamic_constant_buffers;
+  std::vector<uint8_t*> m_mapped_pointers;
+  VkDeviceSize m_min_uniform_buffer_offset_alignment;
 
-private:
-    std::vector<vkex::Buffer> m_dynamic_constant_buffers;
-    std::vector<uint8_t*> m_mapped_pointers;
-    VkDeviceSize m_min_uniform_buffer_offset_alignment;
-
-    uint32_t m_current_offset = UINT32_MAX;
-    uint32_t m_frame_count = 0;
-    uint32_t m_current_frame_index = UINT32_MAX;
+  uint32_t m_current_offset = UINT32_MAX;
+  uint32_t m_frame_count = 0;
+  uint32_t m_current_frame_index = UINT32_MAX;
 };
 
-#endif // __CONSTANT_BUFFER_MANAGER_H__
+#endif  // __CONSTANT_BUFFER_MANAGER_H__

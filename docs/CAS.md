@@ -3,6 +3,7 @@
 Low overhead adaptive sharpening algorithm with optional up-sampling.
 
 ## Sharpness tuning knob
+
 Influences the peak sharpness amount.
 
 More info:

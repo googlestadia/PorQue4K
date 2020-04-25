@@ -21,11 +21,13 @@ ConstantBuffer<ScaledTexCopyDimensionsData> TexDims : register(b0);
 Texture2D<float4> in_texture : register(t1);
 RWTexture2D<float4> out_texture : register(u2);
 
+// clang-format off
 [numthreads(16, 16, 1)]
-void csmain(uint3 dispatch_id : SV_DispatchThreadID)
+void csmain(uint3 dispatch_id : SV_DispatchThreadID) // clang-format on
 {
     if ((dispatch_id.x >= TexDims.dstWidth) ||
-        (dispatch_id.y >= TexDims.dstHeight)) {
+        (dispatch_id.y >= TexDims.dstHeight))
+    {
         return;
     }
 

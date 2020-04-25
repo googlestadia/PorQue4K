@@ -56,7 +56,7 @@ struct VSOutput
     float2 UV0 : TEXCOORD0;
 };
 
-#if defined (ENABLE_SAMPLE_LOCATION_SHADING)
+#if defined(ENABLE_SAMPLE_LOCATION_SHADING)
 struct PSInput
 {
     // These parameters require the `sample`
@@ -69,7 +69,7 @@ struct PSInput
 
     uint sampleIndex : SV_SampleIndex;
 };
-#else //defined (ENABLE_SAMPLE_LOCATION_SHADING)
+#else  //defined (ENABLE_SAMPLE_LOCATION_SHADING)
 struct PSInput
 {
     float4 PositionCS : SV_Position;
@@ -84,7 +84,7 @@ ConstantBuffer<PerObjectConstantData> PerObject : register(b1);
 
 VSOutput vsmain(VSInput input)
 {
-    VSOutput output = (VSOutput) 0;
+    VSOutput output = (VSOutput)0;
     output.PositionWS = mul(PerObject.worldMatrix, float4(input.PositionOS, 1)).xyz;
     output.PositionCS = mul(PerFrame.viewProjectionMatrix, float4(output.PositionWS, 1));
 
@@ -96,14 +96,14 @@ VSOutput vsmain(VSInput input)
 
 struct MaterialInfo
 {
-    float perceptualRoughness;  // roughness value, as authored by the model creator (input to shader)
-    float3 reflectance0;        // full reflectance color (normal incidence angle)
+    float perceptualRoughness; // roughness value, as authored by the model creator (input to shader)
+    float3 reflectance0;       // full reflectance color (normal incidence angle)
 
-    float alphaRoughness;       // roughness mapped to a more linear change in the roughness (proposed by [2])
-    float3 diffuseColor;        // color contribution from diffuse lighting
+    float alphaRoughness; // roughness mapped to a more linear change in the roughness (proposed by [2])
+    float3 diffuseColor;  // color contribution from diffuse lighting
 
-    float3 reflectance90;       // reflectance color at grazing angle
-    float3 specularColor;       // color contribution from specular lighting
+    float3 reflectance90; // reflectance color at grazing angle
+    float3 specularColor; // color contribution from specular lighting
 };
 
 struct AngularInfo
@@ -140,19 +140,19 @@ float3 GetNormal(PSInput input, float2 tdx, float2 tdy)
     // TODO: Add path to just use vertex normal?
 
     float2 nUV = input.UV0;
-	
+
     float3 pos_dx = ddx(input.PositionWS);
     float3 pos_dy = ddy(input.PositionWS);
     float3 tex_dx = ddx(float3(nUV, 0.0));
     float3 tex_dy = ddy(float3(nUV, 0.0));
     float3 t = (tex_dy.y * pos_dx - tex_dx.y * pos_dy) / (tex_dx.x * tex_dy.y - tex_dy.x * tex_dx.y);
-	
+
     float3 ng = normalize(input.Normal);
-    
+
     t = normalize(t - ng * dot(ng, t));
     float3 b = normalize(cross(ng, t));
     float3x3 tbn = float3x3(t, b, ng);
-    
+
     // if we generate ng from derivatives, normalize
     //float3 n = normalize(tbn[2].xyz);
 #if defined(ENABLE_MANUAL_GRADIENTS)
@@ -161,7 +161,7 @@ float3 GetNormal(PSInput input, float2 tdx, float2 tdy)
     float3 n = normalTexture.Sample(texSampler, input.UV0).rgb;
 #endif
     n = normalize(mul(transpose(tbn), ((2.0 * n - 1.0))));
-	
+
     return n;
 }
 
@@ -179,13 +179,13 @@ AngularInfo GetAngularInfo(float3 pointToLight, float3 normal, float3 view)
     float VdotH = clamp(dot(v, h), 0.0, 1.0);
 
     AngularInfo angularInfo =
-    {
-        NdotL,
-        NdotV,
-        NdotH,
-        LdotH,
-        VdotH,
-    };
+        {
+            NdotL,
+            NdotV,
+            NdotH,
+            LdotH,
+            VdotH,
+        };
 
     return angularInfo;
 }
@@ -194,12 +194,9 @@ AngularInfo GetAngularInfo(float3 pointToLight, float3 normal, float3 view)
 // https://google.github.io/filament/Filament.html#materialsystem/specularbrdf/fresnel(specularf)
 float3 SpecularReflection(MaterialInfo materialInfo, AngularInfo angularInfo)
 {
-    return 
-        materialInfo.reflectance0 + 
-        (
-            (materialInfo.reflectance90 - materialInfo.reflectance0) * 
-            pow(clamp(1.0 - angularInfo.VdotH, 0.0, 1.0), 5.0)
-        );
+    return materialInfo.reflectance0 +
+           ((materialInfo.reflectance90 - materialInfo.reflectance0) *
+            pow(clamp(1.0 - angularInfo.VdotH, 0.0, 1.0), 5.0));
 }
 
 // Smith-GGX specular visibility function
@@ -223,7 +220,7 @@ float VisibilityOcclusion(MaterialInfo materialInfo, AngularInfo angularInfo)
 }
 
 // GGX normal distribution function
-// Alt implementations listed: 
+// Alt implementations listed:
 // https://google.github.io/filament/Filament.html#materialsystem/specularbrdf/normaldistributionfunction(speculard)
 float MicrofacetDistribution(MaterialInfo materialInfo, AngularInfo angularInfo)
 {
@@ -279,26 +276,26 @@ float4 psmain(PSInput input) : SV_Target
     float3 specularColor = float3(0.0, 0.0, 0.0);
     // TODO: Manipulate via constant if not available from material?
     float3 f0 = float3(0.04, 0.04, 0.04);
-	
+
     float2 tdx = float2(0.0f, 0.0f);
     float2 tdy = float2(0.0f, 0.0f);
 #if defined(ENABLE_MANUAL_GRADIENTS)
-  #if (CB_RESOLVE_DEBUG > 0)
+#if (CB_RESOLVE_DEBUG > 0)
     tdx = ddx_fine(input.UV0) * PerFrame.texGradScaler;
     tdy = ddy_fine(input.UV0) * PerFrame.texGradScaler;
-  #else
+#else
     tdx = ddx_fine(input.UV0) * GRADIENT_SCALING_FACTOR;
     tdy = ddy_fine(input.UV0) * GRADIENT_SCALING_FACTOR;
-  #endif
+#endif
 #endif // defined(ENABLE_MANUAL_GRADIENTS)
 
     // TODO: Create function to route samples through
 
-	// TODO: Support KHR_materials_pbrSpecularGlossiness?
-	
+    // TODO: Support KHR_materials_pbrSpecularGlossiness?
+
     const float metallicFactor = PerObject.metallicFactor;
     const float roughnessFactor = PerObject.roughnessFactor;
-	
+
     // https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#pbrmetallicroughnessmetallicroughnesstexture
     // "The metalness values are sampled from the B channel. The roughness values are sampled from the G channel."
 #if defined(ENABLE_MANUAL_GRADIENTS)
@@ -308,10 +305,10 @@ float4 psmain(PSInput input) : SV_Target
 #endif
     perceptualRoughness = metallicRoughness.g * roughnessFactor;
     metallic = metallicRoughness.b * metallicFactor;
-	
+
     perceptualRoughness = saturate(perceptualRoughness);
     metallic = saturate(metallic);
-	
+
     const float4 baseColorFactor = PerObject.baseColorFactor;
 #if defined(ENABLE_MANUAL_GRADIENTS)
     baseColor = baseColorTexture.SampleGrad(texSampler, input.UV0, tdx, tdy);
@@ -319,15 +316,15 @@ float4 psmain(PSInput input) : SV_Target
     baseColor = baseColorTexture.Sample(texSampler, input.UV0);
 #endif
     baseColor *= baseColorFactor;
-	
+
     // https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#metallic-roughness-material
     diffuseColor = baseColor.rgb * (float3(1.0, 1.0, 1.0) - f0) * (1.0 - metallic);
     specularColor = lerp(f0, baseColor.rgb, metallic);
-	
-	// TODO: Alpha cutoff?
+
+    // TODO: Alpha cutoff?
     baseColor.a = 1.0;
-	
-	// Roughness remapping
+
+    // Roughness remapping
     // https://google.github.io/filament/Filament.html#materialsystem/parameterization/remapping
     float alphaRoughness = perceptualRoughness * perceptualRoughness;
 
@@ -335,36 +332,35 @@ float4 psmain(PSInput input) : SV_Target
     float3 specularEnvironmentR0 = specularColor.rgb;
     // https://google.github.io/filament/Filament.html#lighting/occlusion/specularocclusion
     float3 specularEnvironmentR90 = float3(1.0, 1.0, 1.0) * clamp(reflectance * 50.0, 0.0, 1.0);
-	
+
     float3 normal = GetNormal(input, tdx, tdy);
     float3 view = normalize(PerFrame.cameraPos.xyz - input.PositionWS);
     float3 color = float3(0.0, 0.0, 0.0);
-	
+
     // TODO: This fails ShaderModule creation somehow...
     // Try a newer version of DXC or file a bug!
-    //GPULightInfo light = PerFrame.dirLight; 
-    
+    //GPULightInfo light = PerFrame.dirLight;
+
     GPULightInfo light;
     light.direction = PerFrame.dirLight.direction;
     light.color = PerFrame.dirLight.color;
     light.intensity = PerFrame.dirLight.intensity;
-	
+
     MaterialInfo materialInfo =
-    {
-        perceptualRoughness,
-        specularEnvironmentR0,
-        alphaRoughness,
-        diffuseColor,
-        specularEnvironmentR90,
-        specularColor
-    };
+        {
+            perceptualRoughness,
+            specularEnvironmentR0,
+            alphaRoughness,
+            diffuseColor,
+            specularEnvironmentR90,
+            specularColor};
 
-	// TODO: Handle other light types	
+    // TODO: Handle other light types
     color += CalcDirectionalLightContrib(input, light, materialInfo, normal, view);
-	
-	// TODO: Handle IBL?
 
-    // TODO: occlusion strength constant, controlled by debug slider	
+    // TODO: Handle IBL?
+
+    // TODO: occlusion strength constant, controlled by debug slider
     float ao = 1.0f;
 #if defined(ENABLE_MANUAL_GRADIENTS)
     ao = occlusionTexture.SampleGrad(texSampler, input.UV0, tdx, tdy).r;
@@ -372,8 +368,8 @@ float4 psmain(PSInput input) : SV_Target
     ao = occlusionTexture.Sample(texSampler, input.UV0).r;
 #endif
     color *= ao;
-	
-	// TODO: Load frame emissive factors
+
+    // TODO: Load frame emissive factors
     const float3 objectEmissiveFactor = PerObject.emissiveFactor;
     const float frameEmissiveFactor = 1.f;
 #if defined(ENABLE_MANUAL_GRADIENTS)
@@ -385,41 +381,41 @@ float4 psmain(PSInput input) : SV_Target
 
     float4 outColor = float4(color, baseColor.a);
 
-	// TODO: Define debug outputs
+    // TODO: Define debug outputs
     //{
-        // Texture coordinates
-        //return float4(input.UV0.x, input.UV0.y, 0.f, 1);
+    // Texture coordinates
+    //return float4(input.UV0.x, input.UV0.y, 0.f, 1);
 
-        // Texture gradients
-//#if defined(ENABLE_MANUAL_GRADIENTS)
-        //return float4(tdy.x * 100.f, tdy.y * 100.f, 0.f, 1.f);
-//#endif   
-    
-        // Input vertex normal
-        //return float4(input.Normal.x, input.Normal.y, input.Normal.z, 1);
-    
-        // Derived normal
-        //return float4(normal.rgb, 1.f);
-    
-        // View
-        //return float4(view.rgb, 1.f);
-    
-        // Base color
-        //return float4(baseColor.rgb, 1.f);
-    
-        // Metallic roughness
-        //return float4(metallicRoughness.rgb, 1.f);
+    // Texture gradients
+    //#if defined(ENABLE_MANUAL_GRADIENTS)
+    //return float4(tdy.x * 100.f, tdy.y * 100.f, 0.f, 1.f);
+    //#endif
 
-        // Occlusion texture
-        //return float4(ao, ao, ao, 1.f);
-    
-        // Emissive
-        //return float4(emissive, 1.f);
-    
-        // Material based diffuse and specular contributions
-        //return float4(diffuseColor.rgb, 1.f);
-	    //return float4(specularColor.rgb, 1.f);
+    // Input vertex normal
+    //return float4(input.Normal.x, input.Normal.y, input.Normal.z, 1);
+
+    // Derived normal
+    //return float4(normal.rgb, 1.f);
+
+    // View
+    //return float4(view.rgb, 1.f);
+
+    // Base color
+    //return float4(baseColor.rgb, 1.f);
+
+    // Metallic roughness
+    //return float4(metallicRoughness.rgb, 1.f);
+
+    // Occlusion texture
+    //return float4(ao, ao, ao, 1.f);
+
+    // Emissive
+    //return float4(emissive, 1.f);
+
+    // Material based diffuse and specular contributions
+    //return float4(diffuseColor.rgb, 1.f);
+    //return float4(specularColor.rgb, 1.f);
     //}
-	
+
     return outColor;
 }

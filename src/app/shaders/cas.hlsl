@@ -25,36 +25,38 @@ RWTexture2D<float4> out_texture : register(u2);
 
 #include "ffx_a.h"
 
-AF3 CasLoad(in int2 ip) {
-	return in_texture[ip].rgb;
+AF3 CasLoad(in int2 ip)
+{
+    return in_texture[ip].rgb;
 }
 
 void CasInput(inout float r, inout float g, inout float b) {}
 
 #include "ffx_cas.h"
 
+// clang-format off
 [numthreads(64, 1, 1)]
-void csmain(uint3 invocation_id : SV_GroupThreadID, uint3 workgroup_id : SV_GroupID)
+void csmain(uint3 invocation_id : SV_GroupThreadID, uint3 workgroup_id : SV_GroupID) // clang-format on
 {
-	AU4 const0 = CASValues.const0;
-	AU4 const1 = CASValues.const1;
+    AU4 const0 = CASValues.const0;
+    AU4 const1 = CASValues.const1;
 
-	// Do remapping of local xy in workgroup for a more PS-like swizzle pattern
-	AU2 gxy = ARmp8x8(invocation_id.x)+AU2(workgroup_id.x<<4u,workgroup_id.y<<4u);
-	// Filter.
-	AF4 c;
-	CasFilter(c.r, c.g, c.b, gxy, const0, const1, false);
-	out_texture[ASU2(gxy)] = c;
-	gxy.x += 8u;
+    // Do remapping of local xy in workgroup for a more PS-like swizzle pattern
+    AU2 gxy = ARmp8x8(invocation_id.x) + AU2(workgroup_id.x << 4u, workgroup_id.y << 4u);
+    // Filter.
+    AF4 c;
+    CasFilter(c.r, c.g, c.b, gxy, const0, const1, false);
+    out_texture[ASU2(gxy)] = c;
+    gxy.x += 8u;
 
-	CasFilter(c.r, c.g, c.b, gxy, const0, const1, false);
-	out_texture[ASU2(gxy)] = c;
-	gxy.y += 8u;
+    CasFilter(c.r, c.g, c.b, gxy, const0, const1, false);
+    out_texture[ASU2(gxy)] = c;
+    gxy.y += 8u;
 
-	CasFilter(c.r, c.g, c.b, gxy, const0, const1, false);
-	out_texture[ASU2(gxy)] = c;
-	gxy.x -= 8u;
+    CasFilter(c.r, c.g, c.b, gxy, const0, const1, false);
+    out_texture[ASU2(gxy)] = c;
+    gxy.x -= 8u;
 
-	CasFilter(c.r, c.g, c.b, gxy, const0, const1, false);
-	out_texture[ASU2(gxy)] = c;
+    CasFilter(c.r, c.g, c.b, gxy, const0, const1, false);
+    out_texture[ASU2(gxy)] = c;
 }

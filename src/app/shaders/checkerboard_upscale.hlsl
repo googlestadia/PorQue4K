@@ -31,16 +31,18 @@ Texture2DMS<float4> cbLeft : register(t1);
 Texture2DMS<float4> cbRight : register(t2);
 RWTexture2D<float4> out_texture : register(u3);
 
+// clang-format off
 [numthreads(8, 8, 1)]
-void csmain(uint3 dispatch_id : SV_DispatchThreadID)
+void csmain(uint3 dispatch_id : SV_DispatchThreadID) // clang-format on
 {
     // We will write out 4 pixels per thread here (re-assembled quad)
     // per source buffer pixel (2 real + 2 reconstructed)
     if ((dispatch_id.x >= CBResolveInfo.srcWidth) ||
-        (dispatch_id.y >= CBResolveInfo.srcHeight)) {
+        (dispatch_id.y >= CBResolveInfo.srcHeight))
+    {
         return;
     }
-    
+
     // Image 0 is at X offset 0, Image 1 is X offset 0.5
     // We don't have have explicit sample location control, otherwise, we could flip-flop
     // the sample locations every other frame. With this method, we burn some pixels at
@@ -77,7 +79,7 @@ void csmain(uint3 dispatch_id : SV_DispatchThreadID)
     {
         // The 'upper-left' pixel of the right CB image, one column to the right
         // Refer to docs/CHECKERBOARD.md for more info.
-        int2 quarterResCoord = quarterResPixelLocation + int2(1,0);
+        int2 quarterResCoord = quarterResPixelLocation + int2(1, 0);
         quarterResCoord.x += CBResolveInfo.urXOffset * CB_RESOLVE_DEBUG;
         upperRightColor = cbRight.Load(quarterResCoord, kUpperLeftSampleIndex);
     }

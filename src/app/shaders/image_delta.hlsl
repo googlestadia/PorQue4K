@@ -30,11 +30,13 @@ static const uint kDisabledViz = 0;
 static const uint kLumaDelta = 1;
 static const uint kRGBDelta = 2;
 
+// clang-format off
 [numthreads(16, 16, 1)]
-void csmain(uint3 dispatch_id : SV_DispatchThreadID)
+void csmain(uint3 dispatch_id : SV_DispatchThreadID) // clang-format on
 {
     if ((dispatch_id.x >= TexDims.dstWidth) ||
-        (dispatch_id.y >= TexDims.dstHeight)) {
+        (dispatch_id.y >= TexDims.dstHeight))
+    {
         return;
     }
 
@@ -45,20 +47,26 @@ void csmain(uint3 dispatch_id : SV_DispatchThreadID)
 
     float3 outColor;
 
-    if (kLumaDelta == Options.vizMode) {
+    if (kLumaDelta == Options.vizMode)
+    {
         float internalLuma = dot(internalPixel.rgb, luma_consts);
         float nativeLuma = dot(nativePixel.rgb, luma_consts);
 
         float lumaDelta = abs(internalLuma - nativeLuma);
 
         outColor = float3(lumaDelta, lumaDelta, lumaDelta);
-    } else if (kRGBDelta == Options.vizMode) {
+    }
+    else if (kRGBDelta == Options.vizMode)
+    {
         outColor = abs(internalPixel.rgb - nativePixel.rgb);
-    } else {
+    }
+    else
+    {
         outColor = internalPixel.rgb;
     }
 
-    if (kDisabledViz != Options.vizMode) {
+    if (kDisabledViz != Options.vizMode)
+    {
         outColor *= Options.deltaAmplifier;
     }
 
