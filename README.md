@@ -111,3 +111,11 @@ compile HLSL shaders to SPIR-V.
 
 Currently, the project has been verified against
 [9c89a1c2](https://github.com/microsoft/DirectXShaderCompiler/commit/9c89a1c2c6baa76dabc154f126408973848b0069).
+
+# Collaborators
+
+* [apazylbe](https://github.com/apazylbe)
+* [chaoticbob](https://github.com/chaoticbob)
+* [ndeakin](https://github.com/ndeakin)
+* [olegat](https://github.com/olegat)
+* [robbiesri](https://github.com/robbiesri)
