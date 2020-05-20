@@ -31,6 +31,40 @@ Texture2DMS<float4> cbLeft : register(t1);
 Texture2DMS<float4> cbRight : register(t2);
 RWTexture2D<float4> out_texture : register(u3);
 
+static const uint kSampleModeViewportJitter = 0;
+static const uint kSampleModeCustomSampleLocs = 1;
+
+static const uint kUpperLeftQuadrantIndex = 0;
+static const uint kUpperRightQuadrantIndex = 1;
+static const uint kLowerLeftQuadrantIndex = 2;
+static const uint kLowerRightQuadrantIndex = 3;
+
+static const int kUpperSampleIndex = 1;
+static const int kLowerSampleIndex = 0;
+
+// In Vulkan, the sample index 0 is to the right (0.75, 0.75)
+// of sample index 1 (0.25, 0.25), assuming default MSAA 2x
+// sample positions
+
+// Jittered samples
+// We offset the 'right' checkerboard image 0.5 pixels to the right.
+// In order to reconstruct our quad, we have to 'reach over' to the next
+// column of cbRight pixels in-order to reconstruct the quad.
+// Reconstructed quad:
+//  cbL.1   (cbR+x1).1
+//  cbR.0   cbL.0
+// I had the stupid idea of generating a horizontal 'mirrored' image for the
+// cbRight frame, which would give me 'perfect' pixel coverage, but who the
+// hell would ever want to integrate that shit into their engine?
+
+// Custom Sample Locations
+// We toggle the horizontal aspect of the two samples between frames,
+// but retain the vertical alignment. This is done to be able to use
+// the same sample index between the jittered or custom sample path
+// Reconstructed quad:
+// cbL.1  cbR.1
+// cbR.0  cbL.0
+
 // clang-format off
 [numthreads(8, 8, 1)]
 void csmain(uint3 dispatch_id : SV_DispatchThreadID) // clang-format on
@@ -43,63 +77,41 @@ void csmain(uint3 dispatch_id : SV_DispatchThreadID) // clang-format on
         return;
     }
 
-    // Image 0 is at X offset 0, Image 1 is X offset 0.5
-    // We don't have have explicit sample location control, otherwise, we could flip-flop
-    // the sample locations every other frame. With this method, we burn some pixels at
-    // vertical edges :/
-    // I did think of possibly doing a horizontally mirrored render every other frame,
-    // which would provide perfect pixel interlocking between two frames, but who really
-    // would do that (as in, integrating into an engine)?
-    //
-    //  cbL.1   (cbR+x1).1
-    //  cbR.0   cbL.0
-    //
-
-    // In Vulkan, the sample index 0 is to the right (0.75, 0.75)
-    // of sample index 1 (0.25, 0.25)
-    const int kUpperLeftSampleIndex = 1;
-    const int kLowerRightSampleIndex = 0;
-
     const uint2 quarterResPixelLocation = dispatch_id.xy;
-    const uint2 upperLeftLocation = dispatch_id.xy * CB_RESOLVE_PIXELS_PER_THREAD_DIM;
-    const uint2 upperRightLocation = upperLeftLocation + uint2(1, 0);
-    const uint2 lowerLeftLocation = upperLeftLocation + uint2(0, 1);
-    const uint2 lowerRightLocation = upperLeftLocation + uint2(1, 1);
 
-    // TODO: Re-wire debug horizontal offsets
-
-    float4 upperLeftColor = float4(0, 0, 0, 0);
+    float4 upperLeftColor;
     {
         int2 quarterResCoord = quarterResPixelLocation;
         quarterResCoord.x += CBResolveInfo.ulXOffset * CB_RESOLVE_DEBUG;
-        upperLeftColor = cbLeft.Load(quarterResCoord, kUpperLeftSampleIndex);
+        upperLeftColor = cbLeft.Load(quarterResCoord, kUpperSampleIndex);
     }
-
-    float4 upperRightColor = float4(0, 0, 0, 0);
+    float4 upperRightColor;
     {
-        // The 'upper-left' pixel of the right CB image, one column to the right
-        // Refer to docs/CHECKERBOARD.md for more info.
-        int2 quarterResCoord = quarterResPixelLocation + int2(1, 0);
+        int2 quarterResCoord = quarterResPixelLocation;
+        quarterResCoord.x += uint(CBResolveInfo.sampleGenMode == kSampleModeViewportJitter);
         quarterResCoord.x += CBResolveInfo.urXOffset * CB_RESOLVE_DEBUG;
-        upperRightColor = cbRight.Load(quarterResCoord, kUpperLeftSampleIndex);
+        upperRightColor = cbRight.Load(quarterResCoord, kUpperSampleIndex);
     }
-
-    float4 lowerLeftColor = float4(0, 0, 0, 0);
+    float4 lowerLeftColor;
     {
         int2 quarterResCoord = quarterResPixelLocation;
         quarterResCoord.x += CBResolveInfo.llXOffset * CB_RESOLVE_DEBUG;
-        lowerLeftColor = cbRight.Load(quarterResCoord, kLowerRightSampleIndex);
+        lowerLeftColor = cbRight.Load(quarterResCoord, kLowerSampleIndex);
     }
-
-    float4 lowerRightColor = float4(0, 0, 0, 0);
+    float4 lowerRightColor;
     {
         int2 quarterResCoord = quarterResPixelLocation;
         quarterResCoord.x += CBResolveInfo.lrXOffset * CB_RESOLVE_DEBUG;
-        lowerRightColor = cbLeft.Load(quarterResCoord, kLowerRightSampleIndex);
+        lowerRightColor = cbLeft.Load(quarterResCoord, kLowerSampleIndex);
     }
 
-    out_texture[upperLeftLocation] = upperLeftColor;
-    out_texture[upperRightLocation] = upperRightColor;
-    out_texture[lowerLeftLocation] = lowerLeftColor;
-    out_texture[lowerRightLocation] = lowerRightColor;
+    const uint2 outQuadUpperLeft = dispatch_id.xy * CB_RESOLVE_PIXELS_PER_THREAD_DIM;
+    const uint2 outQuadUpperRight = outQuadUpperLeft + uint2(1, 0);
+    const uint2 outQuadLowerLeft = outQuadUpperLeft + uint2(0, 1);
+    const uint2 outQuadLowerRight = outQuadUpperLeft + uint2(1, 1);
+
+    out_texture[outQuadUpperLeft] = upperLeftColor;
+    out_texture[outQuadUpperRight] = upperRightColor;
+    out_texture[outQuadLowerLeft] = lowerLeftColor;
+    out_texture[outQuadLowerRight] = lowerRightColor;
 }

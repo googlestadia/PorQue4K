@@ -405,6 +405,35 @@ vkex::Result CGraphicsPipeline::InitializeMultisample()
   m_vk_pipeline_multisample.alphaToCoverageEnable  = VK_FALSE;
   m_vk_pipeline_multisample.alphaToOneEnable       = VK_FALSE;
 
+  if (m_create_info.sample_locations_enable == VK_TRUE) {
+    m_vk_pipeline_sample_locations_ext.sampleLocationsEnable = VK_TRUE;
+
+    m_vk_pipeline_sample_locations_ext.sampleLocationsInfo = {
+        VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT};
+    m_vk_pipeline_sample_locations_ext.sampleLocationsInfo
+        .sampleLocationsPerPixel =
+        m_create_info.default_sample_locations_info.sampleLocationsPerPixel;
+    m_vk_pipeline_sample_locations_ext.sampleLocationsInfo
+        .sampleLocationGridSize =
+        m_create_info.default_sample_locations_info.sampleLocationGridSize;
+    m_vk_pipeline_sample_locations_ext.sampleLocationsInfo
+        .sampleLocationsCount =
+        m_create_info.default_sample_locations_info.sampleLocationsCount;
+
+    for (uint32_t sample_index = 0;
+         sample_index <
+         m_create_info.default_sample_locations_info.sampleLocationsCount;
+         sample_index++) {
+      m_vk_pipeline_sample_locations_list_ext.push_back(
+          m_create_info.default_sample_locations_info
+              .pSampleLocations[sample_index]);
+    }
+    m_vk_pipeline_sample_locations_ext.sampleLocationsInfo.pSampleLocations =
+        DataPtr(m_vk_pipeline_sample_locations_list_ext);
+
+    m_vk_pipeline_multisample.pNext = &m_vk_pipeline_sample_locations_ext;
+  }
+
   return vkex::Result::Success;
 }
 
@@ -478,6 +507,10 @@ vkex::Result CGraphicsPipeline::InitializeDynamicState()
   m_vk_dynamic_states.push_back(VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK);
   m_vk_dynamic_states.push_back(VK_DYNAMIC_STATE_STENCIL_WRITE_MASK);
   m_vk_dynamic_states.push_back(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
+
+  if (m_create_info.sample_locations_enable) {
+    m_vk_dynamic_states.push_back(VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT);
+  }
   
   m_vk_pipeline_dynamic_state.flags             = 0;
   m_vk_pipeline_dynamic_state.dynamicStateCount = CountU32(m_vk_dynamic_states);

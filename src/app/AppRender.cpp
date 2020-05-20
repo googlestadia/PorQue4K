@@ -42,6 +42,7 @@ void VkexInfoApp::RenderInternalAndTarget(vkex::CommandBuffer cmd,
       vkex::RenderPass render_pass;
       GeneratedShaderState* pipeline;
       VkViewport viewport;
+      void* render_pass_begin_pNext = nullptr;
 
       switch (GetUpscalingTechnique()) {
         case UpscalingTechniqueKey::None:
@@ -57,6 +58,19 @@ void VkexInfoApp::RenderInternalAndTarget(vkex::CommandBuffer cmd,
                   .render_pass;
           pipeline = &m_generated_shader_states[AppShaderList::GeometryCB];
           viewport = m_cb_viewport;
+          if (m_sample_locations_enabled) {
+            // Technically, we don't need this on platforms that support
+            // variableSampleLocations and our particular management
+            // of depth attachments, but it doesn't _hurt_
+            render_pass_begin_pNext =
+                static_cast<void*>(&m_rp_sample_locations);
+
+            // The spec is unclear whether this state is latched, or attaches
+            // to the previously bound pipeline. But same with the other
+            // dynamic state so...
+            vkex::CmdSetSampleLocationsEXT(cmd->GetVkObject(),
+                                           &m_current_sample_locations_info);
+          }
           break;
         }
         default:
@@ -71,7 +85,9 @@ void VkexInfoApp::RenderInternalAndTarget(vkex::CommandBuffer cmd,
       dsv_clear.depthStencil.depth = 1.0f;
       dsv_clear.depthStencil.stencil = 0xFF;
       std::vector<VkClearValue> clear_values = {rtv_clear, dsv_clear};
-      cmd->CmdBeginRenderPass(render_pass, &clear_values);
+      cmd->CmdBeginRenderPass(render_pass, &clear_values,
+                              VK_SUBPASS_CONTENTS_INLINE,
+                              render_pass_begin_pNext);
 
       std::vector<VkViewport> vps = {viewport};
       cmd->CmdSetViewport(0, &vps);
@@ -136,6 +152,7 @@ void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd,
                                           uint32_t frame_index) {
   auto& per_frame_data = m_per_frame_datas[frame_index];
 
+  // TODO: These barriers are bogus for the checkerboard upscale...
   cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -158,6 +175,8 @@ void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd,
       VKEX_LOG_ERROR("Upscaling failure due to unknown upscaling technique.");
       break;
   }
+
+  // TODO: These barriers are bogus for the checkerboard upscale...
   cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,

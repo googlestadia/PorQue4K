@@ -143,6 +143,12 @@ enum DeltaVisualizerMode {
   kDeltaVizCount,
 };
 
+enum CheckerboardSampleMode {
+  kViewportJitter = 0,
+  kCustomSampleLocs = 1,
+  kCBSampleModeCount,
+};
+
 enum TimerTag {
   kSceneRenderInternal = 0,
   kUpscaleInternal = 1,
@@ -229,8 +235,6 @@ class VkexInfoApp : public vkex::Application {
   float GetSuggestedFontScale();
   void DrawAppInfoGUI(uint32_t frame_index);
 
-  void CheckVulkanFeaturesForPipelines();
-
   // AppRender.cpp
   void RenderInternalAndTarget(vkex::CommandBuffer cmd, uint32_t frame_index);
   void NaiveUpscale(vkex::CommandBuffer cmd, uint32_t frame_index);
@@ -248,6 +252,8 @@ class VkexInfoApp : public vkex::Application {
                                   const VkFormat depth_format);
   void SetupShaders(const std::vector<ShaderProgramInputs>& shader_inputs,
                     std::vector<GeneratedShaderState>& generated_shader_states);
+  void CheckVulkanFeaturesForPipelines();
+  void ConfigureCustomSampleLocationsState();
 
   // CAS.cpp
   void UpdateCASConstants(const VkExtent2D& srcExtent,
@@ -257,6 +263,7 @@ class VkexInfoApp : public vkex::Application {
   // Checkerboard.cpp
   void UpdateCheckerboardConstants(const VkExtent2D& dstExtent,
                                    CBUpscalingConstants& constants);
+  void UpdateCheckerboardRenderState(uint32_t cb_frame_index);
 
  private:
   // CPU side state
@@ -303,6 +310,16 @@ class VkexInfoApp : public vkex::Application {
   int32_t m_cb_upper_right_XOffset = 0;
   int32_t m_cb_lower_left_XOffset = 0;
   int32_t m_cb_lower_right_XOffset = 0;
+
+  bool m_sample_locations_enabled = false;
+  bool m_variable_sample_locations_available = false;
+  VkSampleLocationsInfoEXT m_current_sample_locations_info;
+  std::vector<VkSampleLocationEXT> m_current_sample_locations;
+  VkRenderPassSampleLocationsBeginInfoEXT m_rp_sample_locations;
+  std::vector<VkAttachmentSampleLocationsEXT> m_attachment_sample_locations;
+  std::vector<VkSubpassSampleLocationsEXT> m_subpass_sample_locations;
+  CheckerboardSampleMode m_checkerboard_samples_mode =
+      CheckerboardSampleMode::kViewportJitter;
 
   DeltaVisualizerMode m_delta_visualizer_mode = kDisabled;
   float m_delta_amplifier = 1.0f;

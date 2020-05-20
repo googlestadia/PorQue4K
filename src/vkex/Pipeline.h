@@ -251,6 +251,9 @@ struct GraphicsPipelineCreateInfo {
 
   VkBool32                              sample_shading_enable = false;
   float                                 min_sample_shading_factor = 0.0f;
+
+  VkBool32 sample_locations_enable = VK_FALSE;
+  VkSampleLocationsInfoEXT default_sample_locations_info = {};
 };
 
 /** @class IGraphicsPipeline
@@ -326,6 +329,8 @@ private:
   VkFrontFace                                           m_vk_front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   VkPipelineRasterizationStateCreateInfo                m_vk_pipeline_rasterization = { VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
   VkPipelineMultisampleStateCreateInfo                  m_vk_pipeline_multisample = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
+  VkPipelineSampleLocationsStateCreateInfoEXT           m_vk_pipeline_sample_locations_ext = { VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT };
+  std::vector<VkSampleLocationEXT>                      m_vk_pipeline_sample_locations_list_ext;
   VkPipelineDepthStencilStateCreateInfo                 m_vk_pipeline_depth_stencil = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
   VkPipelineColorBlendStateCreateInfo                   m_vk_pipeline_color_blend = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
   std::vector<VkDynamicState>                           m_vk_dynamic_states;

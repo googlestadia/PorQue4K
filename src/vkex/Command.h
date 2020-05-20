@@ -146,8 +146,8 @@ public:
   void  CmdWriteTimestamp(VkPipelineStageFlagBits pipelineStage, vkex::QueryPool queryPool, uint32_t query);
   void  CmdCopyQueryPoolResults(vkex::QueryPool queryPool, uint32_t firstQuery, uint32_t queryCount, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize stride, VkQueryResultFlags flags);
   void  CmdPushConstants(VkPipelineLayout layout, VkShaderStageFlags stageFlags, uint32_t offset, const std::vector<uint8_t>* pValues);
-  void  CmdBeginRenderPass(const vkex::RenderPass renderPass, uint32_t clearValueCount, const VkClearValue* pClearValues, VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE);
-  void  CmdBeginRenderPass(const vkex::RenderPass renderPass, const std::vector<VkClearValue>* pClearValues, VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE);
+  void  CmdBeginRenderPass(const vkex::RenderPass renderPass, uint32_t clearValueCount, const VkClearValue* pClearValues, VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE, void* pNext = nullptr);
+  void  CmdBeginRenderPass(const vkex::RenderPass renderPass, const std::vector<VkClearValue>* pClearValues, VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE, void* pNext = nullptr);
   void  CmdBeginRenderPass(const vkex::RenderPass renderPass, VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE);
   void  CmdExecuteCommands(const std::vector<VkCommandBuffer>* pCommandBuffers);
 

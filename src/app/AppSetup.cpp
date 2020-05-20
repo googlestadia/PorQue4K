@@ -77,15 +77,24 @@ void VkexInfoApp::SetupImagesAndRenderPasses(const VkExtent2D present_extent,
   {
     auto checkerboard_width = present_extent.width / 2;
     auto checkerboard_height = present_extent.height / 2;
-    VKEX_CALL(CreateSimpleMSRenderPass(
-        GetDevice(), GetGraphicsQueue(), checkerboard_width,
-        checkerboard_height, color_format, depth_format, VK_SAMPLE_COUNT_2_BIT,
-        &m_checkerboard_simple_render_pass[0]));
+
+    VkImageCreateFlags extra_depth_usage_flags = 0;
+    {
+      if (m_sample_locations_enabled) {
+        extra_depth_usage_flags =
+            VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT;
+      }
+    }
 
     VKEX_CALL(CreateSimpleMSRenderPass(
         GetDevice(), GetGraphicsQueue(), checkerboard_width,
         checkerboard_height, color_format, depth_format, VK_SAMPLE_COUNT_2_BIT,
-        &m_checkerboard_simple_render_pass[1]));
+        extra_depth_usage_flags, &m_checkerboard_simple_render_pass[0]));
+
+    VKEX_CALL(CreateSimpleMSRenderPass(
+        GetDevice(), GetGraphicsQueue(), checkerboard_width,
+        checkerboard_height, color_format, depth_format, VK_SAMPLE_COUNT_2_BIT,
+        extra_depth_usage_flags, &m_checkerboard_simple_render_pass[1]));
   }
 }
 
@@ -186,5 +195,103 @@ void VkexInfoApp::SetupShaders(
       VKEX_CALL(m_shared_descriptor_pool->AllocateDescriptorSets(
           allocate_info, &gen_shader_state.descriptor_sets[frame_index]));
     }
+  }
+}
+
+void VkexInfoApp::CheckVulkanFeaturesForPipelines() {
+  if (GetDevice()
+          ->GetPhysicalDevice()
+          ->GetPhysicalDeviceFeatures()
+          .features.sampleRateShading == VK_FALSE) {
+    VKEX_LOG_ERROR(
+        "sampleRateShading is missing from VkPhysicalDeviceFeatures, "
+        "Checkerboard Rendering will fail!");
+  }
+
+  {
+    std::string sample_locations_name = VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME;
+    if (vkex::Contains(GetDevice()->GetLoadedExtensions(),
+                       sample_locations_name)) {
+      m_sample_locations_enabled = true;
+    }
+
+    // If variableSampleLocations is supported, we aren't obliged
+    // to use the render pass structures associated with
+    // VK_EXT_sample_locations for the purposes of validating consistent
+    // sample locations.
+    if (m_sample_locations_enabled) {
+      m_variable_sample_locations_available = (GetDevice()
+                                         ->GetPhysicalDevice()
+                                         ->GetSampleLocationsPropertiesEXT()
+                                         .variableSampleLocations == VK_TRUE);
+    }
+  }
+}
+
+void VkexInfoApp::ConfigureCustomSampleLocationsState() {
+  if (m_sample_locations_enabled) {
+    m_current_sample_locations_info = {
+        VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT};
+    m_current_sample_locations_info.sampleLocationsPerPixel =
+        VK_SAMPLE_COUNT_2_BIT;
+    m_current_sample_locations_info.sampleLocationGridSize = {1, 1};
+
+    // Every client that needs VkSampleLocationsInfoEXT will
+    // use this vector of sample locations. Since we keep them
+    // unified across the lifetime of a frame, it's ok to point
+    // to the same backing data. Makes it easy to toggle between
+    // frames without having to replicate data.
+    m_current_sample_locations.push_back({0.75, 0.75});
+    m_current_sample_locations.push_back({0.25, 0.25});
+
+    m_current_sample_locations_info.sampleLocationsCount =
+        vkex::CountU32(m_current_sample_locations);
+    m_current_sample_locations_info.pSampleLocations =
+        vkex::DataPtr(m_current_sample_locations);
+
+    // It's really not clear how much info is _actually_
+    // needed in this structure, mostly because information on
+    // how custom sample locations affect render pass/render
+    // target/pipeline functionality is scattered all over the spec.
+    // The spec seems to indicate you only need VkAttachmentSampleLocationsEXT
+    // in order to perform implicit transition layouts of depth images.
+    // But it seems if it needs the information to do layout transitions,
+    // maybe it also needs the info to do render pass clears.
+    // VkSubpassSampleLocationsEXT seems to be needed for the depth layout
+    // transitions or to validate that pipelines don't change in a subpass
+    // if VkPhysicalDeviceSampleLocationsPropertiesEXT::variableSampleLocations
+    // is VK_FALSE.
+    // It doesn't seem to hurt if I have this information, and since it's one
+    // subpass in the sample, I don't see the harm. If I had a full-featured
+    // engine, I could see being pretty irritated to add this functionality.
+    // I guess the need for the structure is omitted as long as I don't
+    // need implicit layout transitions or ship on a platform that forbids
+    // variableSampleLocations.
+    m_rp_sample_locations = {
+        VK_STRUCTURE_TYPE_RENDER_PASS_SAMPLE_LOCATIONS_BEGIN_INFO_EXT};
+
+    VkAttachmentSampleLocationsEXT attachment_sample_locations = {};
+    attachment_sample_locations.attachmentIndex =
+        m_checkerboard_simple_render_pass[0]
+            .render_pass->GetDepthStencilAttachmentReference()
+            .attachment;
+    attachment_sample_locations.sampleLocationsInfo =
+        m_current_sample_locations_info;
+    m_attachment_sample_locations.push_back(attachment_sample_locations);
+
+    VkSubpassSampleLocationsEXT subpass_sample_locations = {};
+    subpass_sample_locations.subpassIndex = 0;
+    subpass_sample_locations.sampleLocationsInfo =
+        m_current_sample_locations_info;
+    m_subpass_sample_locations.push_back(subpass_sample_locations);
+
+    m_rp_sample_locations.attachmentInitialSampleLocationsCount =
+        vkex::CountU32(m_attachment_sample_locations);
+    m_rp_sample_locations.pAttachmentInitialSampleLocations =
+        vkex::DataPtr(m_attachment_sample_locations);
+    m_rp_sample_locations.postSubpassSampleLocationsCount =
+        vkex::CountU32(m_subpass_sample_locations);
+    m_rp_sample_locations.pPostSubpassSampleLocations =
+        vkex::DataPtr(m_subpass_sample_locations);
   }
 }

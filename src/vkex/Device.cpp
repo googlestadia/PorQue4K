@@ -58,6 +58,9 @@ vkex::Result CPhysicalDevice::InternalCreate(
   // Descriptive name
   InitializeVendorProperties();
 
+  // Extension-based properties
+  InitializeExtensionProperties();
+
   // Features
   {
     m_vk_physical_device_features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
@@ -157,6 +160,45 @@ void CPhysicalDevice::InitializeVendorProperties()
   }
 
   m_descriptive_name = ss.str();
+}
+
+void CPhysicalDevice::InitializeExtensionProperties() {
+  VkPhysicalDevice vk_physical_device = m_create_info.vk_object;
+
+  bool sample_locations_exists = false;
+  {
+    std::vector<VkExtensionProperties> properties_list;
+    VkResult vk_result = InvalidValue<VkResult>::Value;
+    VKEX_VULKAN_RESULT_CALL(
+        vk_result, vkex::EnumerateDeviceExtensionPropertiesVKEX(
+                       m_create_info.vk_object, nullptr, &properties_list););
+    if (vk_result != VK_SUCCESS) {
+      VKEX_LOG_WARN("Unable to initialize extension-owned properties");
+      return;
+    }
+    std::string sample_locations_name = VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME;
+    for (auto &extension_property : properties_list) {
+      if (sample_locations_name.compare(extension_property.extensionName) ==
+          0) {
+        sample_locations_exists = true;
+        break;
+      }
+    }
+  }
+
+  {
+    if (sample_locations_exists) {
+      m_extension_owned_properties.sample_locations_properties = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT};
+
+      VkPhysicalDeviceProperties2 properties_2 = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+      properties_2.pNext = &m_extension_owned_properties.sample_locations_properties;
+
+      vkex::GetPhysicalDeviceProperties2(m_create_info.vk_object,
+                                         &properties_2);
+    }
+  }
 }
 
 bool CPhysicalDevice::GetQueueFamilyProperties(
@@ -297,6 +339,10 @@ vkex::Result CDevice::InitializeExtensions()
     optional.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
 #endif
 
+    for (auto& optional_request : m_create_info.optional_extensions) {
+      optional.push_back(optional_request);
+    }
+
     for (auto& name : optional) {
       // Check to make sure extension is available
       bool found = Contains(m_found_extensions, name);
@@ -322,7 +368,7 @@ vkex::Result CDevice::InitializeExtensions()
       return vkex::Result::ErrorDeviceExtensionNotFound;
     }
   }
-  
+
   return vkex::Result::Success;
 }
 

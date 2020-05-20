@@ -719,10 +719,11 @@ void CCommandBuffer::CmdPushConstants(VkPipelineLayout layout, VkShaderStageFlag
 {
 }
 
-void CCommandBuffer::CmdBeginRenderPass(const vkex::RenderPass renderPass, uint32_t clearValueCount, const VkClearValue* pClearValues, VkSubpassContents contents)
+void CCommandBuffer::CmdBeginRenderPass(const vkex::RenderPass renderPass, uint32_t clearValueCount, const VkClearValue* pClearValues, VkSubpassContents contents, void* pNext)
 {
   const VkRect2D& fullRenderArea = renderPass->GetFullRenderArea();
   VkRenderPassBeginInfo vk_begin_info = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+    vk_begin_info.pNext           = pNext;
     vk_begin_info.renderPass      = renderPass->GetVkObject();
     vk_begin_info.framebuffer     = renderPass->GetVkFramebufferObject();
     vk_begin_info.renderArea      = fullRenderArea;
@@ -733,13 +734,14 @@ void CCommandBuffer::CmdBeginRenderPass(const vkex::RenderPass renderPass, uint3
     contents);
 }
 
-void CCommandBuffer::CmdBeginRenderPass(const vkex::RenderPass renderPass, const std::vector<VkClearValue>* pClearValues, VkSubpassContents contents)
+void CCommandBuffer::CmdBeginRenderPass(const vkex::RenderPass renderPass, const std::vector<VkClearValue>* pClearValues, VkSubpassContents contents, void* pNext)
 {
   this->CmdBeginRenderPass(
     renderPass,
     CountU32(*pClearValues),
     DataPtr(*pClearValues),
-    contents);
+    contents,
+    pNext);
 }
 
 void CCommandBuffer::CmdBeginRenderPass(const vkex::RenderPass renderPass, VkSubpassContents contents)

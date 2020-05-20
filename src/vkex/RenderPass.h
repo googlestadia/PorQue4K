@@ -130,6 +130,10 @@ public:
     return m_create_info.rtvs;
   }
 
+  VkAttachmentReference GetDepthStencilAttachmentReference() const {
+      return m_vk_depth_stencil_attachment_reference;
+  }
+
 private:
   friend class CDevice;
   friend class IObjectStorageFunctions;

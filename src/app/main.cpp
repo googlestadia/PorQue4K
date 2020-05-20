@@ -41,6 +41,9 @@ void VkexInfoApp::Configure(const vkex::ArgParser& args,
   // configurable, allowing for different uses without touching the vkex lib
   // code.
 
+  configuration.optional_device_extensions.push_back(
+      VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME);
+
 #if defined(ENABLE_VALIDATION)
   configuration.graphics_debug.enable = true;
   configuration.graphics_debug.message_severity.info = true;
@@ -114,6 +117,8 @@ void VkexInfoApp::Setup() {
   SetupImagesAndRenderPasses(GetPresentResolutionExtent(),
                              GetConfiguration().swapchain.color_format,
                              VK_FORMAT_D32_SFLOAT);
+
+  ConfigureCustomSampleLocationsState();
 
   // Build pipelines + related state
   {
@@ -239,6 +244,12 @@ void VkexInfoApp::Setup() {
       create_info.samples = VK_SAMPLE_COUNT_2_BIT;
       create_info.min_sample_shading_factor = 1.0f;
       create_info.sample_shading_enable = VK_TRUE;
+
+      if (m_sample_locations_enabled) {
+        create_info.sample_locations_enable = VK_TRUE;
+        create_info.default_sample_locations_info =
+            m_current_sample_locations_info;
+      }
 
       create_info.depth_test_enable = true;
       create_info.depth_write_enable = true;
@@ -534,11 +545,7 @@ void VkexInfoApp::Render(vkex::Application::RenderData* p_data) {
   uint32_t cb_frame_index = frame_index % 2;
   m_per_frame_datas[frame_index].cb_frame_index = cb_frame_index;
 
-  // add half pixel offset between frames, since half-pixel in
-  // half-res equals full pixel in full-res
-  // 'odd' frames will be offset
-  m_cb_viewport = vkex::BuildInvertedYViewport(m_internal_render_area);
-  m_cb_viewport.x += 0.5f * cb_frame_index;
+  UpdateCheckerboardRenderState(cb_frame_index);
 
   // TODO: In the future, if we have some temporal technique (TAA or DRS),
   // we might want to think about using the Viewport to generate the jitter.

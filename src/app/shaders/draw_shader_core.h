@@ -62,6 +62,10 @@ struct PSInput
     // These parameters require the `sample`
     // interpolation modifier in order to generate
     // the correct values for checkerboard.
+
+    // VK_EXT_sample_location seems to forbid the
+    // use of 'sample' interpolation...
+
     sample float4 PositionCS : SV_Position;
     sample float3 PositionWS : WORLDPOS;
     sample float3 Normal : NORMAL;
@@ -415,6 +419,14 @@ float4 psmain(PSInput input) : SV_Target
     // Material based diffuse and specular contributions
     //return float4(diffuseColor.rgb, 1.f);
     //return float4(specularColor.rgb, 1.f);
+
+    // Verify that pixel quads share the same sample index
+    //#if defined(ENABLE_SAMPLE_LOCATION_SHADING)
+    //    float smpIndexGradX = ddx_fine(input.sampleIndex);
+    //    float smpIndexGradY = ddy_fine(input.sampleIndex);
+    //    return float4(smpIndexGradX, smpIndexGradY, 0.f, 1.0f);
+    //#endif
+
     //}
 
     return outColor;

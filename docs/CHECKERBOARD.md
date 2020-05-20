@@ -542,7 +542,290 @@ vkCmdBindPipeline(cmd_buf, //...
 
 ##### VK_EXT_sample_locations
 
-<!--- TO INVESTIGATE --->
+There is a cross-vendor Vulkan extension,
+[VK_EXT_sample_locations][ext_sample_locations], that offers the ability to
+specify custom sample locations in a user-specified pixel grid. While we could
+attempt to manipulate a pixel quad (assuming the implementation supports it),
+we'll defer that investigation (see:
+[Pixel-Quad Sample Locations](#pixel-quad-sample-locations)). Instead, we will
+focus on toggling sample locations inside of a single pixel.
+
+We won't cover everything that goes into using an extension (include
+extension name during device creation, obtain function pointers to API entry
+points, etc). But we will go over most of how to setup and use the extension,
+partially because there aren't any reference implementations that I could find.
+It's also a very verbose extension, but then this is Vulkan.
+
+###### Device Setup
+
+We first need to query the implementation capabilities. Assuming the
+implementation exposes the `VK_EXT_sample_locations` extension, you can query
+the properties via `vkGetPhysicalDeviceProperties2`. You need to include a
+`VkPhysicalDeviceSampleLocationsPropertiesEXT` structure in the `pNext` chain of
+` VkPhysicalDeviceProperties2`.
+
+```c
+VkPhysicalDeviceSampleLocationsPropertiesEXT sample_loc_props = 
+    { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT };
+VkPhysicalDeviceProperties2 properties_2 =
+    { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
+properties_2.pNext = &sample_loc_props;
+vkGetPhysicalDeviceProperties2(physical_device_handle, &properties_2);
+```
+
+The [man page][PhysicalDeviceSampleLocationsProperties] has more info about the
+contents of `VkPhysicalDeviceSampleLocationsPropertiesEXT`, but we can highlight
+two fields:
+
+```c
+typedef struct VkPhysicalDeviceSampleLocationsPropertiesEXT {
+    VkSampleCountFlags    sampleLocationSampleCounts;
+    VkBool32              variableSampleLocations;
+} VkPhysicalDeviceSampleLocationsPropertiesEXT;
+```
+
+`sampleLocationSampleCounts` will tell us what the implementation supports as
+far as sample count configurations that we can manipulate. For our purposes, we
+need to verify that `VK_SAMPLE_COUNT_2_BIT` is included.
+
+`variableSampleLocations` tell us whether sample locations can change inside a
+subpass. While we don't actually care for our purposes (toggling locations on a
+frame basis), we are required to do some bookkeeping if
+`variableSampleLocations` is set to `VK_FALSE`. We'll cover the specifics later,
+but we have to inform subpasses about sample locations, probably so the
+implementation or validation can enforce this requirement.
+
+On Stadia, `variableSampleLocations` is set to `VK_TRUE`, so some of the
+renderpass requirements are relaxed. However, if your Vulkan backend is
+cross-platform, you'll have to keep an eye on these properties.
+
+###### Depth Image Setup
+
+We have to mark our MSAA depth buffers with
+`VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT` at
+[image creation time][ImageCreateFlags]. This informs the implementation that
+the image might change the sample locations, which is probably needed for
+implementations that have representations for depth buffer data that aren't
+necessarily raw floating point values (e.g. plane equations).
+
+###### VkSampleLocationsInfoEXT
+
+Because we're going to be using this structure quite a bit, it makes sense to
+spend some time to examine the contents. `VkSampleLocationsInfoEXT`
+([man page][SampleLocationsInfo]) is used in pipeline creation, render passes,
+and for setting dynamic state.
+
+```c
+typedef struct VkSampleLocationsInfoEXT {
+    VkStructureType               sType;
+    const void*                   pNext;
+    VkSampleCountFlagBits         sampleLocationsPerPixel;
+    VkExtent2D                    sampleLocationGridSize;
+    uint32_t                      sampleLocationsCount;
+    const VkSampleLocationEXT*    pSampleLocations;
+} VkSampleLocationsInfoEXT;
+```
+
+Here is how we'll populate the structure for use with our checkerboard
+implementation:
+
+```c
+VkSampleLocationsInfoEXT sample_locations_info =
+    { VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT };
+sample_locations_info.sampleLocationsPerPixel = VK_SAMPLE_COUNT_2_BIT;
+sample_locations_info.sampleLocationGridSize = {1, 1};
+sample_locations_info.sampleLocationsCount = 2;
+
+// If you'll re-use this structure, make sure you point to memory that's
+// persistent!
+VkSampleLocationEXT sample_locations_list[] = {
+    {0.75, 0.75},
+    {0.25, 0.25},
+};
+sample_locations_info.pSampleLocations = &sample_locations_list;
+```
+
+In this setup, we're actually re-using the default MSAA 2x sample locations. If
+we retain this structure, it's easy for us to toggle the `VkSampleLocationEXT`
+values between frames.
+
+###### Graphics Pipeline Setup
+
+We have to augment two structures during graphics pipeline creation in order to
+use custom sample locations: `VkPipelineMultisampleStateCreateInfo` and
+`VkPipelineDynamicStateCreateInfo`.
+
+In order to supplement `VkPipelineMultisampleStateCreateInfo`, we need to pass
+in `VkPipelineSampleLocationsStateCreateInfoEXT` as part of the `pNext` chain.
+This structure will enable custom sample locations on the pipeline
+(`sampleLocationsEnable`), along with provide the sample locations in case we
+aren't setting the locations dynamically (`sampleLocationsInfo`).
+
+```c
+VkPipelineSampleLocationsStateCreateInfoEXT pipeline_sample_locations_ci = 
+    { VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT };
+pipeline_sample_locations_ci.sampleLocationsEnable = VK_TRUE;
+
+// We will use our previously populated VkSampleLocationsInfoEXT
+pipeline_sample_locations_ci.sampleLocationsInfo = sample_locations_info;
+```
+
+The [dynamic state][DynamicState] modification is more obvious: simply add
+`VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT` to the list of `VkDynamicState`
+elements owned by `VkPipelineDynamicStateCreateInfo`. Once this is enabled, we
+can use `vkCmdSetSampleLocationsEXT` to set the sample locations, which the
+pipeline will latch for draw commands.
+
+According to the spec, if we are going to set the sample locations
+dynamically in the command buffer, the SampleLocationsInfo specified during
+pipeline creation isn't used. However, the spec also says the structure has to
+be valid. I assume it's doing some early validation against the structure, in
+order to make sure the application isn't doing something too extreme.
+
+###### Begin Renderpass Setup
+
+We have a couple obligations with render passes that really aren't entirely
+clear if you just look at the
+[VK_EXT_sample_locations man page][ext_sample_locations]. Briefly, we need to
+help render passes:
+* Enforce static sample location inside subpasses if
+`variableSampleLocations == VK_FALSE`
+* Inform the implementation on how to handle implicit/automatic layout
+transitions of affected depth attachments
+
+Luckily (or not), we don't need to specify this information at render pass
+creation. Instead, we specify it at `vkCmdBeginRenderPass` time. Like other
+places, we will inject `VkRenderPassSampleLocationsBeginInfoEXT`
+into the `pNext` field of `VkRenderPassBeginInfo`.
+
+We can look at the [man page][RPSampleLocationsInfo] for
+`VkRenderPassSampleLocationsBeginInfoEXT` to see what we need to populate. The
+structure wants to know the initial sample locations for the relevant depth
+images (`VkAttachmentSampleLocationsEXT`) and the sample locations at the end
+of a subpass (`VkSubpassSampleLocationsEXT`). Both bits of info are needed for
+layout transitions, and the latter is needed for sample location enforcement.
+
+Because it's frankly annoying to populate this structure, I'll include the code
+directly from the sample as a reference for how to fill the structure out.
+
+```cpp
+    m_rp_sample_locations = {
+        VK_STRUCTURE_TYPE_RENDER_PASS_SAMPLE_LOCATIONS_BEGIN_INFO_EXT};
+
+    VkAttachmentSampleLocationsEXT attachment_sample_locations = {};
+    attachment_sample_locations.attachmentIndex =
+        m_checkerboard_simple_render_pass[0]
+            .render_pass->GetDepthStencilAttachmentReference()
+            .attachment;
+    attachment_sample_locations.sampleLocationsInfo =
+        m_current_sample_locations_info;
+    m_attachment_sample_locations.push_back(attachment_sample_locations);
+
+    VkSubpassSampleLocationsEXT subpass_sample_locations = {};
+    subpass_sample_locations.subpassIndex = 0;
+    subpass_sample_locations.sampleLocationsInfo =
+        m_current_sample_locations_info;
+    m_subpass_sample_locations.push_back(subpass_sample_locations);
+
+    m_rp_sample_locations.attachmentInitialSampleLocationsCount =
+        static_cast<uint32_t>(m_attachment_sample_locations.size());
+    m_rp_sample_locations.pAttachmentInitialSampleLocations =
+        m_attachment_sample_locations.data();
+    m_rp_sample_locations.postSubpassSampleLocationsCount =
+        static_cast<uint32_t>(m_subpass_sample_locations.size());
+    m_rp_sample_locations.pPostSubpassSampleLocations =
+        m_subpass_sample_locations.data();
+```
+
+Something worth noting is that each of these structures is pointing to the
+same instance of `VkSampleLocationsInfoEXT.pSampleLocations`. In the project
+sample, I only change the actual sample locations between frames, and the values
+are used for the lifetime of the frame. If you have a specific usage where you
+do need to toggle the sample locations at a finer granularity, make sure you are
+pointing to the correct list of `pSampleLocations`.
+
+And of course, we have to remember to _use_ this structure when we fill in
+`VkRenderPassBeginInfo`. As I was learning to use the extension, my initial
+tests did not populate `VkRenderPassSampleLocationsBeginInfoEXT`, even though
+the spec said I needed to because `variableSampleLocations == VK_FALSE`. Yet
+the implementation nor validation complained about my usage.
+
+###### Sample Location Jittering
+
+Now that we've taken care of our bookkeeping to (allegedly) keep Vulkan happy,
+we can actually start TOGGLING our sample locations! Considering all the work
+we had to do up to this point, it's relatively simple to use! All we need to
+use is our old friend, `VkSampleLocationsInfoEXT`. Let's look at the signature
+for `vkCmdSetSampleLocations` ([man page][SetSampleLocations]):
+
+```c
+void vkCmdSetSampleLocationsEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkSampleLocationsInfoEXT*             pSampleLocationsInfo);
+```
+
+As far as the actual sample toggling, the logic is relatively simple for our
+use:
+```c
+if (cb_frame_index == 0) {
+    m_current_sample_locations[0] = {0.75, 0.75};
+    m_current_sample_locations[1] = {0.25, 0.25};
+} else {
+    m_current_sample_locations[0] = {0.25, 0.75};
+    m_current_sample_locations[1] = {0.75, 0.25};
+}
+```
+
+![Toggling custom sample locations for full screen coverage][custom_sample_locations]
+
+Our `VkSampleLocationsInfoEXT` struct will point to these sample locations via
+the `pSampleLocations` member.
+
+We do pick this sample ordering for a reason. Because we currently cannot
+_guarantee_ that `VK_EXT_sample_locations` is actually an appropriate solution
+for us (see [the following section](
+#custom-shader-positions-and-interpolation) for more info), we need to maintain
+a jitter path. By matching the default MSAA 2x sample positions, and the
+horizontal jitter, it makes it relatively simple to maintain a unified
+checkerboard resolve between the two paths.
+
+###### Explicit Depth Image Layout Transition (via vkCmdPipelineBarrier)
+
+If we are going to read a depth buffer that was created with
+`VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT`, we have to pass
+in a pointer to `VkSampleLocationsInfoEXT` in the `VkImageMemoryBarrier`
+`pNext` chain. As mentioned previously, this is probably needed to help the
+implementation resolve the depth buffer into something the shader can read.
+While it does seem kinda strange that the image meta-data doesn't track this
+info itself, we're obliged to provide this information during a layout
+transition (just like in the render pass implicit transition case).
+
+###### Custom Shader Positions and Interpolation
+
+While inspecting the Vulkan spec for references to 'custom sample locations', I
+discovered some very interesting sections discussing how
+`VK_EXT_sample_locations` interacted with the spec.
+
+From [Shader Interfaces - Built-In Variables][ShaderInterfaces]:
+
+> The variable decorated with `SamplePosition` *must* be declared using the Input
+> storage class. If the current pipeline uses custom sample locations the value of
+> any variable decorated with the `SamplePosition` built-in decoration is undefined.
+
+And from the [man page] for `VkGraphicsPipelineCreateInfo`:
+
+> If the `sampleLocationsEnable` member of a
+> `VkPipelineSampleLocationsStateCreateInfoEXT` structure included in the
+> `pNext` chain of `pMultisampleState` is `VK_TRUE`, the fragment shader code
+> *must* not statically use the extended instruction `InterpolateAtSample`
+
+From reading these sections, it sure _sounds_ like we can't rely on sample
+position based inputs in the fragment shader (position or parameters). While I
+can see how they wrote this spec, it's surprising that they uniformly flipped
+this off. I wonder if it couldn't be implementation dependent.
+
+Of course, in practice, this does seem to work, and validation doesn't
+complain.
 
 ##### Projection Matrix Jittering
 
@@ -624,11 +907,31 @@ It could be interesting to experiment with other pixels-per-thread counts.
 
 ### Rotated Checkerboard
 
+### Pixel-Quad Sample Locations
+
+`VK_EXT_sample_locations` allows for implementations to specify custom sample
+locations outside of just a single pixel. The extension can be used to specify
+the sample locations for a pixel grid. We would probably use this to build a
+version of the half-width checkerboard target, where the samples in each pixel
+are horizontally offset from the center to create the checkerboard pattern.
+
+### Increased Depth/Coverage Fidelity
+
+There are some vendor-specific extensions that describe the ability to have
+more depth/coverage samples than color samples per pixel. Currently, Vulkan
+requires that the sample counts match between attachments.  It would be
+compelling to obtain a full resolution depth buffer, which would be very helpful
+for generating a higher fidelity resolve. There would be questions about
+making sure the _right_ samples invoke the fragment shader.
+
+* [VK_NV_framebuffer_mixed_samples man page][NV_framebuffer_mixed_samples]
+* [VK_AMD_mixed_attachment_samples man page][AMD_mixed_attachment_samples]
+
 ## Vulkan/Platform Requests
 
-* Offer a facility to _force_ `sampler` interpolation for parameters (aka 
-varyings) in graphics pipelines. Right now, we can force sample location
-shading at the API level, but parameter interpolation can't be
+* Vulkan could offer a facility to _force_ `sampler` interpolation for
+parameters (aka varyings) in graphics pipelines. Right now, we can force sample
+location shading at the API level, but parameter interpolation can't be
 controlled/enforced.
 
 * RenderDoc supports checkerboard visualization
@@ -637,6 +940,9 @@ controlled/enforced.
 interpolation, which the spec says is 'undefined' when using with
 `VK_EXT_sample_locations`. Maybe a listing of pre-determined locations that
 will work could be nice.
+
+* Make it easier to see how an extension interacts with the spec. Scanning a
+page that angers every browser isn't the way.
 
 ## References
 * [Rendering Rainbow Six Siege][ElMansouri16] - Jalal El Mansouri
@@ -658,11 +964,25 @@ Carpentier, Kohei Ishiyama
 [McFerron18]: https://software.intel.com/en-us/articles/checkerboard-rendering-for-real-time-upscaling-on-intel-integrated-graphics
 [Purche18]: https://www.slideshare.net/QLOC
 
+[ext_sample_locations]: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VK_EXT_sample_locations.html
+[PhysicalDeviceSampleLocationsProperties]: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPhysicalDeviceSampleLocationsPropertiesEXT.html
+[ImageCreateFlags]: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageCreateFlagBits.html
+[DynamicState]: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkDynamicState.html
+[SampleLocationsInfo]: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkSampleLocationsInfoEXT.html
+[RPSampleLocationsInfo]: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkRenderPassSampleLocationsBeginInfoEXT.html
+[SetSampleLocations]: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdSetSampleLocationsEXT.html
+
+[ShaderInterfaces]: https://vulkan.lunarg.com/doc/view/1.2.135.0/windows/chunked_spec/chap14.html#interfaces-builtin-variables
+
+[NV_framebuffer_mixed_samples]: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VK_NV_framebuffer_mixed_samples.html
+[AMD_mixed_attachment_samples]: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VK_AMD_mixed_attachment_samples.html
+
 [simple_cb]: images/simple_cb_resolve_example.PNG
 [eqaa_pixel_quad]: images/eqaa_half_width_pixel_quad.PNG
 [eqaa_gradients]: images/eqaa_half_width_skewed_gradients.PNG
 [msaa_pixel_quad]: images/msaa_quarter_size_pixel_quad.PNG
 [msaa_gradients]: images/msaa_quarter_size_uniform_gradients.PNG
 [vp_offset]: images/viewport_offset.PNG
+[custom_sample_locations]: images/custom_sample_locations.PNG
 [shading_location_delta]:images/shading_delta_between_sample_and_center_location.PNG
 [param_interp_compare]:images/parameter_interpolation_compare.PNG

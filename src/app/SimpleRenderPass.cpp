@@ -8,16 +8,16 @@ vkex::Result CreateSimpleRenderPass(vkex::Device device, vkex::Queue queue,
                                     VkFormat depth_format,
                                     SimpleRenderPass* p_simple_pass) {
   return CreateSimpleMSRenderPass(device, queue, width, height, color_format,
-                                  depth_format, VK_SAMPLE_COUNT_1_BIT,
+                                  depth_format, VK_SAMPLE_COUNT_1_BIT, 0,
                                   p_simple_pass);
 }
 
-vkex::Result CreateSimpleMSRenderPass(vkex::Device device, vkex::Queue queue,
-                                      uint32_t width, uint32_t height,
-                                      VkFormat color_format,
-                                      VkFormat depth_format,
-                                      VkSampleCountFlagBits sample_count,
-                                      SimpleRenderPass* p_simple_pass) {
+vkex::Result CreateSimpleMSRenderPass(
+    vkex::Device device, vkex::Queue queue, uint32_t width, uint32_t height,
+    VkFormat color_format, VkFormat depth_format,
+    VkSampleCountFlagBits sample_count,
+    VkImageCreateFlags extra_depth_create_flags,
+    SimpleRenderPass* p_simple_pass) {
   SimpleRenderPass simple_pass = {};
   simple_pass.rtv_clear_value = {0.0f, 0.0f, 0.0f, 0.0f};
   simple_pass.dsv_clear_value = {0.0f, 0};
@@ -68,6 +68,7 @@ vkex::Result CreateSimpleMSRenderPass(vkex::Device device, vkex::Queue queue,
   // Depth image
   {
     vkex::TextureCreateInfo create_info = {};
+    create_info.image.create_flags.flags = extra_depth_create_flags;
     create_info.image.image_type = VK_IMAGE_TYPE_2D;
     create_info.image.format = depth_format;
     create_info.image.extent = {width, height, 1};

@@ -607,7 +607,6 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index) {
       }
     }
 
-#if (CB_RESOLVE_DEBUG > 0)
     if (GetUpscalingTechnique() == UpscalingTechniqueKey::Checkerboard) {
       ImGui::Separator();
 
@@ -618,6 +617,20 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index) {
           ImGui::NextColumn();
           ImGui::NextColumn();
         }
+        {
+          std::vector<const char*> cb_sample_mode_items = {
+              "Viewport Jitter", "Custom Sample Locs"};
+          VKEX_ASSERT(vkex::CountU32(cb_sample_mode_items) ==
+                      static_cast<uint32_t>(
+                          CheckerboardSampleMode::kCBSampleModeCount));
+          ImGui::Text("Sample Generation");
+          ImGui::NextColumn();
+          ImGui::Combo("##CBSampleGen", (int*)(&m_checkerboard_samples_mode),
+                       vkex::DataPtr(cb_sample_mode_items),
+                       static_cast<int32_t>(cb_sample_mode_items.size()));
+          ImGui::NextColumn();
+        }
+#if (CB_RESOLVE_DEBUG > 0)
         {
           ImGui::Text("UL Offset");
           ImGui::NextColumn();
@@ -649,10 +662,10 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index) {
                              0.f, 1.f);
           ImGui::NextColumn();
         }
+#endif  // (CB_RESOLVE_DEBUG > 0)
         ImGui::Columns(1);
       }
     }
-#endif  // (CB_RESOLVE_DEBUG > 0)
 
 #if defined(LIGHT_DEBUGGER)
     ImGui::Separator();
@@ -822,17 +835,4 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index) {
 #endif  // defined(GUI_CPU_STATS)
   }
   ImGui::End();
-}
-
-void VkexInfoApp::CheckVulkanFeaturesForPipelines() {
-  if (GetDevice()
-          ->GetPhysicalDevice()
-          ->GetPhysicalDeviceFeatures()
-          .features.sampleRateShading == VK_FALSE) {
-    VKEX_LOG_ERROR(
-        "sampleRateShading is missing from VkPhysicalDeviceFeatures, "
-        "Checkerboard Upscale could fail!");
-  }
-
-  // TODO: Validate VK_EXT_sample_locations when we start using it
 }

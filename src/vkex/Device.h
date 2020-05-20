@@ -110,6 +110,10 @@ public:
     return m_vendor_properties.amd.shader_core_properties;
   }
 
+  const VkPhysicalDeviceSampleLocationsPropertiesEXT& GetSampleLocationsPropertiesEXT() const {
+    return m_extension_owned_properties.sample_locations_properties;
+  }
+
   /** @fn GetVkPhysicalDeviceLimits
    *
    */
@@ -193,7 +197,12 @@ private:
    * 
    */
   void InitializeVendorProperties();
-  
+
+  /** @fn InitializeExtensionProperties
+   *
+   */
+  void InitializeExtensionProperties();
+
   /** @fn SetInstance
    *
    */
@@ -214,6 +223,10 @@ private:
       VkPhysicalDeviceShaderCorePropertiesAMD shader_core_properties;
     } amd;
   } m_vendor_properties;
+
+  struct {
+    VkPhysicalDeviceSampleLocationsPropertiesEXT sample_locations_properties;
+  } m_extension_owned_properties;
 
   mutable std::string                         m_descriptive_name;
 };
@@ -237,6 +250,7 @@ struct DeviceCreateInfo {
   PhysicalDevice                        physical_device;
   std::vector<DeviceQueueCreateInfo>    queue_create_infos;
   std::vector<std::string>              extensions;
+  std::vector<std::string>              optional_extensions;
   VkPhysicalDeviceFeatures              enabled_features;
   bool                                  safe_values;
 };

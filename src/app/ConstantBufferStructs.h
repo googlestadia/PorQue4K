@@ -57,12 +57,14 @@ struct CASData {
 };
 
 struct CBResolveData {
-  uint srcWidth, srcHeight;
+  uint srcWidth;
+  uint srcHeight;
+  uint sampleGenMode;
+  uint padding1;
   int ulXOffset;
   int urXOffset;
   int llXOffset;
   int lrXOffset;
-  uint2 padding1;
 };
 
 #endif  // __CONSTANT_BUFFER_STRUCTS_H__

@@ -331,6 +331,9 @@ struct Configuration {
     uint32_t                  paced_frame_rate;
   } swapchain;
 
+  // Graphics
+  std::vector<std::string>    optional_device_extensions;
+
   // Graphics debug
   struct {
     bool                      enable;
