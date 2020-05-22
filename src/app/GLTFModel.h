@@ -26,47 +26,6 @@ class GLTFModel {
   GLTFModel() {}
   virtual ~GLTFModel() {}
 
-  void PopulateFromModel(vkex::fs::path model_path, vkex::Queue queue);
-
-  // For building pipeline binding descriptions/attributes
-  std::vector<vkex::VertexBindingDescription> GetVertexBindingDescriptions(
-      uint32_t node_index, uint32_t primitive_index);
-  std::vector<VkFormat> GetVertexBufferFormats(uint32_t node_index,
-                                               uint32_t primitive_index);
-
-  // For descriptor sets
-  const std::vector<vkex::Texture>& GetMaterialTextures(
-      uint32_t node_index, uint32_t primitive_index);
-  const std::vector<vkex::Sampler>& GetMaterialSamplers(
-      uint32_t node_index, uint32_t primitive_index);
-
-  // For constant buffers
-  const float* GetBaseColorFactor(uint32_t node_index,
-                                  uint32_t primitive_index);
-  const float* GetEmissiveFactor(uint32_t node_index, uint32_t primitive_index);
-  float GetMetallicFactor(uint32_t node_index, uint32_t primitive_index);
-  float GetRoughnessFactor(uint32_t node_index, uint32_t primitive_index);
-
-  // For draws
-  vkex::Buffer GetIndexBuffer(uint32_t node_index, uint32_t primitive_index);
-  VkIndexType GetIndexType(uint32_t node_index, uint32_t primitive_index);
-  void GetVertexBuffers(uint32_t node_index, uint32_t primitive_index,
-                        std::vector<VkBuffer>& vertex_buffers);
-  uint32_t GetIndexCount(uint32_t node_index, uint32_t primitive_index);
-
-  // Debug UI functionality
-  // These APIs are intentionally obtuse to prevent accidental easy use!
-  void GetDebugBaseColorFactor(uint32_t node_index, uint32_t primitive_index,
-                               float** out_base_color_factor);
-  void GetDebugEmissiveFactor(uint32_t node_index, uint32_t primitive_index,
-                              float** out_emissive_factor);
-  void GetDebugMetallicFactor(uint32_t node_index, uint32_t primitive_index,
-                              float** out_metallic);
-  void GetDebugRoughnessFactor(uint32_t node_index, uint32_t primitive_index,
-                               float** out_roughness);
-
-  // For Aiur!
-
   enum BufferType {
     Position = 0,
     Normal = 1,
@@ -83,7 +42,6 @@ class GLTFModel {
     MaterialComponentTypeCount,
   };
 
- protected:
   struct Scene {
     std::vector<uint32_t> nodeIndices;
   };
@@ -117,25 +75,25 @@ class GLTFModel {
     std::vector<Primitive> primitives;
   };
 
-  struct Material {
-    // TODO: Make this a vector of indices?
-    uint32_t baseColorTextureIndex = UINT32_MAX;
-    uint32_t metallicRoughnessTextureIndex = UINT32_MAX;
-    uint32_t emissiveTextureIndex = UINT32_MAX;
-    uint32_t occlusionTextureIndex = UINT32_MAX;
-    uint32_t normalTextureIndex = UINT32_MAX;
+  struct Sampler {
+    VkFilter magFilter = VK_FILTER_NEAREST;
+    VkFilter minFilter = VK_FILTER_NEAREST;
 
+    VkSamplerMipmapMode mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+    VkSamplerAddressMode wrapS = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    VkSamplerAddressMode wrapT = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    VkSamplerAddressMode wrapR = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  };
+
+  struct Material {
     float baseColorFactor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     float emissiveFactor[3] = {1.0f, 1.0f, 1.0f};
     float metallicFactor = 1.0f;
     float roughnessFactor = 1.0f;
 
-    // Derived state
-    std::vector<vkex::Texture> textures;
-    std::vector<vkex::Sampler> samplers;
+    uint32_t textureIndices[MaterialTextureType::MaterialComponentTypeCount];
   };
-
-  // TODO: Do we need to stash off some sampler state?
 
   struct Texture {
     uint32_t samplerIndex = UINT32_MAX;
@@ -147,6 +105,55 @@ class GLTFModel {
     vkex::Texture gpuTexture;
   };
 
+  void PopulateFromModel(vkex::fs::path model_path, vkex::Queue queue);
+
+  // For building pipeline binding descriptions/attributes
+  std::vector<vkex::VertexBindingDescription> GetVertexBindingDescriptions(
+      uint32_t node_index, uint32_t primitive_index);
+  std::vector<VkFormat> GetVertexBufferFormats(uint32_t node_index,
+                                               uint32_t primitive_index);
+
+  // For descriptor sets
+  const Material& GetMaterialInfo(uint32_t node_index,
+                                  uint32_t primitive_index);
+  const Texture& GetTextureInfo(uint32_t texture_index);
+  const Image& GetImageInfo(uint32_t image_index);
+  const Sampler& GetSamplerInfo(uint32_t sampler_index);
+  vkex::Sampler GetVkSampler(uint32_t sampler_index);
+
+  vkex::Sampler GetVkSamplerFromMaterialComponent(uint32_t node_index,
+                                                  uint32_t primitive_index,
+                                                  MaterialTextureType type);
+  vkex::Texture GetVkTextureFromMaterialComponent(uint32_t node_index,
+                                                  uint32_t primitive_index,
+                                                  MaterialTextureType type);
+
+  // For constant buffers
+  const float* GetBaseColorFactor(uint32_t node_index,
+                                  uint32_t primitive_index);
+  const float* GetEmissiveFactor(uint32_t node_index, uint32_t primitive_index);
+  float GetMetallicFactor(uint32_t node_index, uint32_t primitive_index);
+  float GetRoughnessFactor(uint32_t node_index, uint32_t primitive_index);
+
+  // For draws
+  vkex::Buffer GetIndexBuffer(uint32_t node_index, uint32_t primitive_index);
+  VkIndexType GetIndexType(uint32_t node_index, uint32_t primitive_index);
+  void GetVertexBuffers(uint32_t node_index, uint32_t primitive_index,
+                        std::vector<VkBuffer>& vertex_buffers);
+  uint32_t GetIndexCount(uint32_t node_index, uint32_t primitive_index);
+
+  // Debug UI functionality
+  // These APIs are intentionally obtuse to prevent accidental easy use!
+  void GetDebugBaseColorFactor(uint32_t node_index, uint32_t primitive_index,
+                               float** out_base_color_factor);
+  void GetDebugEmissiveFactor(uint32_t node_index, uint32_t primitive_index,
+                              float** out_emissive_factor);
+  void GetDebugMetallicFactor(uint32_t node_index, uint32_t primitive_index,
+                              float** out_metallic);
+  void GetDebugRoughnessFactor(uint32_t node_index, uint32_t primitive_index,
+                               float** out_roughness);
+
+ protected:
   bool IsImageSRGB(const uint32_t image_index);
   const Primitive& GetPrimitive(uint32_t node_index, uint32_t primitive_index);
 
@@ -158,7 +165,8 @@ class GLTFModel {
   std::vector<Mesh> m_meshes;
 
   std::vector<Material> m_materials;
-  std::vector<vkex::Sampler> m_samplers;
+  std::vector<Sampler> m_samplers;
+  std::vector<vkex::Sampler> m_vk_samplers;
   std::vector<Texture> m_textures;
   std::vector<Image> m_images;
 };

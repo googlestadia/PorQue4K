@@ -275,12 +275,23 @@ void VkexInfoApp::Setup() {
 
   // Scene rendering descriptors
   {
-    // TODO: There will probably only be one sampler to bind...
+    BuildCheckerboardMaterialSampler();
 
-    auto& helmet_samplers = m_helmet_model.GetMaterialSamplers(0, 0);
-    auto& helmet_textures = m_helmet_model.GetMaterialTextures(0, 0);
-    // TODO: Don't hard code this...
-    auto matComponent = GLTFModel::MaterialTextureType::BaseColor;
+    // The sampler is shared for all textures
+    vkex::Sampler regular_material_sampler =
+        m_helmet_model.GetVkSamplerFromMaterialComponent(
+            0, 0, GLTFModel::MaterialTextureType::BaseColor);
+    vkex::Sampler checkerboard_material_sampler = m_cb_grad_adj_sampler;
+
+    vkex::Texture
+        helmet_textures[GLTFModel::MaterialTextureType::MaterialComponentTypeCount];
+    for (uint32_t mat_tex_index = 0;
+        mat_tex_index <
+        GLTFModel::MaterialTextureType::MaterialComponentTypeCount; mat_tex_index++) {
+      helmet_textures[mat_tex_index] =
+          m_helmet_model.GetVkTextureFromMaterialComponent(
+              0, 0, GLTFModel::MaterialTextureType(mat_tex_index));
+    }
 
     auto frame_count = GetConfiguration().frame_count;
     for (uint32_t frame_index = 0; frame_index < frame_count; frame_index++) {
@@ -298,31 +309,22 @@ void VkexInfoApp::Setup() {
                              m_per_object_constants.size);
 
       // TODO: If models are switching, these updates will have to be per-frame
-      m_generated_shader_states[AppShaderList::Geometry]
-          .descriptor_sets[frame_index]
-          ->UpdateDescriptor(2, helmet_samplers[matComponent]);
-      m_generated_shader_states[AppShaderList::Geometry]
-          .descriptor_sets[frame_index]
-          ->UpdateDescriptor(3, helmet_textures[matComponent]);
 
-      // TODO: I'm assuming the sampler, which is not correct
       m_generated_shader_states[AppShaderList::Geometry]
           .descriptor_sets[frame_index]
-          ->UpdateDescriptor(
-              4, helmet_textures
-                     [GLTFModel::MaterialTextureType::MetallicRoughness]);
-      m_generated_shader_states[AppShaderList::Geometry]
-          .descriptor_sets[frame_index]
-          ->UpdateDescriptor(
-              5, helmet_textures[GLTFModel::MaterialTextureType::Emissive]);
-      m_generated_shader_states[AppShaderList::Geometry]
-          .descriptor_sets[frame_index]
-          ->UpdateDescriptor(
-              6, helmet_textures[GLTFModel::MaterialTextureType::Occlusion]);
-      m_generated_shader_states[AppShaderList::Geometry]
-          .descriptor_sets[frame_index]
-          ->UpdateDescriptor(
-              7, helmet_textures[GLTFModel::MaterialTextureType::NormalTex]);
+          ->UpdateDescriptor(2, regular_material_sampler);
+      
+      for (uint32_t texture_index = 0;
+           texture_index <
+           GLTFModel::MaterialTextureType::MaterialComponentTypeCount;
+           texture_index++) {
+        const uint32_t kTextureSlotOffset = 3; // TODO: Source from shared header
+        uint32_t binding_slot = texture_index + kTextureSlotOffset;
+
+        m_generated_shader_states[AppShaderList::Geometry]
+            .descriptor_sets[frame_index]
+            ->UpdateDescriptor(binding_slot, helmet_textures[texture_index]);
+      }
 
       {
         m_generated_shader_states[AppShaderList::GeometryCB]
@@ -336,33 +338,22 @@ void VkexInfoApp::Setup() {
                                m_constant_buffer_manager.GetBuffer(frame_index),
                                m_per_object_constants.size);
 
-        // TODO: If models are switching, these updates will have to be
-        // per-frame
         m_generated_shader_states[AppShaderList::GeometryCB]
             .descriptor_sets[frame_index]
-            ->UpdateDescriptor(2, helmet_samplers[matComponent]);
-        m_generated_shader_states[AppShaderList::GeometryCB]
-            .descriptor_sets[frame_index]
-            ->UpdateDescriptor(3, helmet_textures[matComponent]);
+            ->UpdateDescriptor(2, checkerboard_material_sampler);
 
-        // TODO: I'm assuming the sampler, which is not correct
-        m_generated_shader_states[AppShaderList::GeometryCB]
-            .descriptor_sets[frame_index]
-            ->UpdateDescriptor(
-                4, helmet_textures
-                       [GLTFModel::MaterialTextureType::MetallicRoughness]);
-        m_generated_shader_states[AppShaderList::GeometryCB]
-            .descriptor_sets[frame_index]
-            ->UpdateDescriptor(
-                5, helmet_textures[GLTFModel::MaterialTextureType::Emissive]);
-        m_generated_shader_states[AppShaderList::GeometryCB]
-            .descriptor_sets[frame_index]
-            ->UpdateDescriptor(
-                6, helmet_textures[GLTFModel::MaterialTextureType::Occlusion]);
-        m_generated_shader_states[AppShaderList::GeometryCB]
-            .descriptor_sets[frame_index]
-            ->UpdateDescriptor(
-                7, helmet_textures[GLTFModel::MaterialTextureType::NormalTex]);
+        for (uint32_t texture_index = 0;
+             texture_index <
+             GLTFModel::MaterialTextureType::MaterialComponentTypeCount;
+             texture_index++) {
+          const uint32_t kTextureSlotOffset =
+              3;  // TODO: Source from shared header
+          uint32_t binding_slot = texture_index + kTextureSlotOffset;
+
+          m_generated_shader_states[AppShaderList::GeometryCB]
+              .descriptor_sets[frame_index]
+              ->UpdateDescriptor(binding_slot, helmet_textures[texture_index]);
+        }
       }
     }
   }

@@ -252,6 +252,7 @@ class VkexInfoApp : public vkex::Application {
                                   const VkFormat depth_format);
   void SetupShaders(const std::vector<ShaderProgramInputs>& shader_inputs,
                     std::vector<GeneratedShaderState>& generated_shader_states);
+  void BuildCheckerboardMaterialSampler();
   void CheckVulkanFeaturesForPipelines();
   void ConfigureCustomSampleLocationsState();
 
@@ -320,6 +321,8 @@ class VkexInfoApp : public vkex::Application {
   std::vector<VkSubpassSampleLocationsEXT> m_subpass_sample_locations;
   CheckerboardSampleMode m_checkerboard_samples_mode =
       CheckerboardSampleMode::kViewportJitter;
+
+  vkex::Sampler m_cb_grad_adj_sampler = nullptr;
 
   DeltaVisualizerMode m_delta_visualizer_mode = kDisabled;
   float m_delta_amplifier = 1.0f;

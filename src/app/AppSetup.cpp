@@ -98,6 +98,28 @@ void VkexInfoApp::SetupImagesAndRenderPasses(const VkExtent2D present_extent,
   }
 }
 
+void VkexInfoApp::BuildCheckerboardMaterialSampler() {
+  const GLTFModel::Material& mat = m_helmet_model.GetMaterialInfo(0, 0);
+  const GLTFModel::Texture& tex = m_helmet_model.GetTextureInfo(
+      mat.textureIndices[GLTFModel::MaterialTextureType::BaseColor]);
+  const GLTFModel::Sampler original_sampler =
+      m_helmet_model.GetSamplerInfo(tex.samplerIndex);
+
+  vkex::SamplerCreateInfo checkerboard_sampler_ci = {};
+  checkerboard_sampler_ci.min_filter = original_sampler.minFilter;
+  checkerboard_sampler_ci.mag_filter = original_sampler.magFilter;
+  checkerboard_sampler_ci.mipmap_mode = original_sampler.mipmapMode;
+  checkerboard_sampler_ci.min_lod = 0.0f;
+  checkerboard_sampler_ci.max_lod = 15.0f;
+  checkerboard_sampler_ci.address_mode_u = original_sampler.wrapS;
+  checkerboard_sampler_ci.address_mode_v = original_sampler.wrapT;
+  checkerboard_sampler_ci.address_mode_w = original_sampler.wrapR;
+  checkerboard_sampler_ci.mip_lod_bias = -1.f;
+
+  VKEX_CALL(GetGraphicsQueue()->GetDevice()->CreateSampler(
+      checkerboard_sampler_ci, &m_cb_grad_adj_sampler));
+}
+
 void ConfigureDynamicUbos(vkex::DescriptorSetLayoutCreateInfo& create_info) {
   for (auto& binding : create_info.bindings) {
     if (binding.descriptorType ==
@@ -220,10 +242,11 @@ void VkexInfoApp::CheckVulkanFeaturesForPipelines() {
     // VK_EXT_sample_locations for the purposes of validating consistent
     // sample locations.
     if (m_sample_locations_enabled) {
-      m_variable_sample_locations_available = (GetDevice()
-                                         ->GetPhysicalDevice()
-                                         ->GetSampleLocationsPropertiesEXT()
-                                         .variableSampleLocations == VK_TRUE);
+      m_variable_sample_locations_available =
+          (GetDevice()
+               ->GetPhysicalDevice()
+               ->GetSampleLocationsPropertiesEXT()
+               .variableSampleLocations == VK_TRUE);
     }
   }
 }
