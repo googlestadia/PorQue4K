@@ -17,6 +17,7 @@ struct GPULightInfo {
 
 struct PerFrameConstantData {
   float4x4 viewProjectionMatrix;
+  float4x4 prevViewProjectionMatrix;
   float3 cameraPos;
 #if (CB_RESOLVE_DEBUG > 0)
   float texGradScaler;
@@ -29,6 +30,7 @@ struct PerFrameConstantData {
 
 struct PerObjectConstantData {
   float4x4 worldMatrix;
+  float4x4 prevWorldMatrix;
 
   // material constants
   float4 baseColorFactor;

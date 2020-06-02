@@ -51,6 +51,8 @@ struct VSInput
 struct VSOutput
 {
     float4 PositionCS : SV_Position;
+    float4 CurrentClipPos : TEXCOORD1;
+    float4 PreviousClipPos : TEXCOORD2;
     float3 PositionWS : WORLDPOS;
     float3 Normal : NORMAL;
     float2 UV0 : TEXCOORD0;
@@ -66,7 +68,9 @@ struct PSInput
     // VK_EXT_sample_location seems to forbid the
     // use of 'sample' interpolation...
 
-    sample float4 PositionCS : SV_Position;
+    sample float4 PositionSS : SV_Position;
+    sample float4 CurrentClipPos : TEXCOORD1;
+    sample float4 PreviousClipPos : TEXCOORD2;
     sample float3 PositionWS : WORLDPOS;
     sample float3 Normal : NORMAL;
     sample float2 UV0 : TEXCOORD0;
@@ -76,12 +80,20 @@ struct PSInput
 #else  //defined (ENABLE_SAMPLE_LOCATION_SHADING)
 struct PSInput
 {
-    float4 PositionCS : SV_Position;
+    float4 PositionSS : SV_Position;
+    float4 CurrentClipPos : TEXCOORD1;
+    float4 PreviousClipPos : TEXCOORD2;
     float3 PositionWS : WORLDPOS;
     float3 Normal : NORMAL;
     float2 UV0 : TEXCOORD0;
 };
 #endif //defined (ENABLE_SAMPLE_LOCATION_SHADING)
+
+struct PSOutput
+{
+    float4 color : SV_Target0;
+    float2 velocity : SV_Target1;
+};
 
 ConstantBuffer<PerFrameConstantData> PerFrame : register(b0);
 ConstantBuffer<PerObjectConstantData> PerObject : register(b1);
@@ -91,6 +103,10 @@ VSOutput vsmain(VSInput input)
     VSOutput output = (VSOutput)0;
     output.PositionWS = mul(PerObject.worldMatrix, float4(input.PositionOS, 1)).xyz;
     output.PositionCS = mul(PerFrame.viewProjectionMatrix, float4(output.PositionWS, 1));
+    output.CurrentClipPos = output.PositionCS;
+
+    float3 previousWorldSpace = mul(PerObject.prevWorldMatrix, float4(input.PositionOS, 1)).xyz;
+    output.PreviousClipPos = mul(PerFrame.prevViewProjectionMatrix, float4(previousWorldSpace, 1));
 
     output.Normal = normalize(mul(PerObject.worldMatrix, float4(input.Normal, 0.f)).xyz);
     output.UV0 = input.UV0;
@@ -271,7 +287,7 @@ float3 CalcDirectionalLightContrib(PSInput input, GPULightInfo light, MaterialIn
     return light.intensity * light.color * shade;
 }
 
-float4 psmain(PSInput input) : SV_Target
+PSOutput psmain(PSInput input)
 {
     float perceptualRoughness = 0.0;
     float metallic = 0.0;
@@ -428,6 +444,13 @@ float4 psmain(PSInput input) : SV_Target
     //#endif
 
     //}
+    PSOutput output;
+    output.color = outColor;
 
-    return outColor;
+    // Generate velocity in NDC space to avoid screen-size issues
+    float2 currentNDC = input.CurrentClipPos.xy / input.CurrentClipPos.w;
+    float2 previousNDC = input.PreviousClipPos.xy / input.PreviousClipPos.w;
+    output.velocity = currentNDC - previousNDC;
+
+    return output;
 }

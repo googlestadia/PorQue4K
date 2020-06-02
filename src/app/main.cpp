@@ -159,7 +159,8 @@ void VkexInfoApp::Setup() {
       create_info.depth_test_enable = true;
       create_info.depth_write_enable = true;
       create_info.rtv_formats = {
-          m_internal_draw_simple_render_pass.rtv->GetFormat()};
+          m_internal_draw_simple_render_pass.color_rtv->GetFormat(),
+          m_internal_draw_simple_render_pass.velocity_rtv->GetFormat()};
       create_info.dsv_format =
           m_internal_draw_simple_render_pass.dsv->GetFormat();
       create_info.render_pass = m_internal_draw_simple_render_pass.render_pass;
@@ -254,7 +255,8 @@ void VkexInfoApp::Setup() {
       create_info.depth_test_enable = true;
       create_info.depth_write_enable = true;
       create_info.rtv_formats = {
-          m_checkerboard_simple_render_pass[0].rtv->GetFormat()};
+          m_checkerboard_simple_render_pass[0].color_rtv->GetFormat(),
+          m_checkerboard_simple_render_pass[0].velocity_rtv->GetFormat()};
       create_info.dsv_format =
           m_checkerboard_simple_render_pass[0].dsv->GetFormat();
       create_info.render_pass =
@@ -283,11 +285,12 @@ void VkexInfoApp::Setup() {
             0, 0, GLTFModel::MaterialTextureType::BaseColor);
     vkex::Sampler checkerboard_material_sampler = m_cb_grad_adj_sampler;
 
-    vkex::Texture
-        helmet_textures[GLTFModel::MaterialTextureType::MaterialComponentTypeCount];
+    vkex::Texture helmet_textures
+        [GLTFModel::MaterialTextureType::MaterialComponentTypeCount];
     for (uint32_t mat_tex_index = 0;
-        mat_tex_index <
-        GLTFModel::MaterialTextureType::MaterialComponentTypeCount; mat_tex_index++) {
+         mat_tex_index <
+         GLTFModel::MaterialTextureType::MaterialComponentTypeCount;
+         mat_tex_index++) {
       helmet_textures[mat_tex_index] =
           m_helmet_model.GetVkTextureFromMaterialComponent(
               0, 0, GLTFModel::MaterialTextureType(mat_tex_index));
@@ -313,12 +316,13 @@ void VkexInfoApp::Setup() {
       m_generated_shader_states[AppShaderList::Geometry]
           .descriptor_sets[frame_index]
           ->UpdateDescriptor(2, regular_material_sampler);
-      
+
       for (uint32_t texture_index = 0;
            texture_index <
            GLTFModel::MaterialTextureType::MaterialComponentTypeCount;
            texture_index++) {
-        const uint32_t kTextureSlotOffset = 3; // TODO: Source from shared header
+        const uint32_t kTextureSlotOffset =
+            3;  // TODO: Source from shared header
         uint32_t binding_slot = texture_index + kTextureSlotOffset;
 
         m_generated_shader_states[AppShaderList::Geometry]
@@ -375,7 +379,7 @@ void VkexInfoApp::Setup() {
                              m_internal_to_target_scaled_copy_constants.size);
       m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy]
           .descriptor_sets[frame_index]
-          ->UpdateDescriptor(1, m_internal_draw_simple_render_pass.rtv_texture);
+          ->UpdateDescriptor(1, m_internal_draw_simple_render_pass.color_texture);
       m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy]
           .descriptor_sets[frame_index]
           ->UpdateDescriptor(2, m_target_texture);
@@ -394,7 +398,7 @@ void VkexInfoApp::Setup() {
       m_generated_shader_states[AppShaderList::InternalTargetImageDelta]
           .descriptor_sets[frame_index]
           ->UpdateDescriptor(
-              3, m_internal_as_target_draw_simple_render_pass.rtv_texture);
+              3, m_internal_as_target_draw_simple_render_pass.color_texture);
       m_generated_shader_states[AppShaderList::InternalTargetImageDelta]
           .descriptor_sets[frame_index]
           ->UpdateDescriptor(4, m_visualization_texture);
@@ -413,7 +417,7 @@ void VkexInfoApp::Setup() {
                              m_cas_upscaling_constants.size);
       m_generated_shader_states[AppShaderList::UpscalingCAS]
           .descriptor_sets[frame_index]
-          ->UpdateDescriptor(1, m_internal_draw_simple_render_pass.rtv_texture);
+          ->UpdateDescriptor(1, m_internal_draw_simple_render_pass.color_texture);
       m_generated_shader_states[AppShaderList::UpscalingCAS]
           .descriptor_sets[frame_index]
           ->UpdateDescriptor(2, m_target_texture);
@@ -451,6 +455,8 @@ void VkexInfoApp::Setup() {
       per_frame_data.issued_gpu_timers.resize(TimerTag::kTimerTagCount);
     }
   }
+
+  SetupInitialConstantBufferValues();
 }
 
 void VkexInfoApp::Update(double frame_elapsed_time) {
@@ -476,8 +482,12 @@ void VkexInfoApp::Update(double frame_elapsed_time) {
   float4x4 V = camera.GetViewMatrix();
   float4x4 P = camera.GetProjectionMatrix();
 
+  m_per_object_constants.data.prevWorldMatrix =
+      m_per_object_constants.data.worldMatrix;
   m_per_object_constants.data.worldMatrix = M;
 
+  m_per_frame_constants.data.prevViewProjectionMatrix =
+      m_per_frame_constants.data.viewProjectionMatrix;
   m_per_frame_constants.data.viewProjectionMatrix = P * V;
   m_per_frame_constants.data.cameraPos = eye;
 

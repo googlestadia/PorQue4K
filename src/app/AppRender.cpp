@@ -84,7 +84,7 @@ void VkexInfoApp::RenderInternalAndTarget(vkex::CommandBuffer cmd,
       VkClearValue dsv_clear = {};
       dsv_clear.depthStencil.depth = 1.0f;
       dsv_clear.depthStencil.stencil = 0xFF;
-      std::vector<VkClearValue> clear_values = {rtv_clear, dsv_clear};
+      std::vector<VkClearValue> clear_values = {rtv_clear, rtv_clear, dsv_clear};
       cmd->CmdBeginRenderPass(render_pass, &clear_values,
                               VK_SUBPASS_CONTENTS_INLINE,
                               render_pass_begin_pNext);
@@ -153,7 +153,7 @@ void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd,
   auto& per_frame_data = m_per_frame_datas[frame_index];
 
   // TODO: These barriers are bogus for the checkerboard upscale...
-  cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
+  cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.color_texture,
                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
@@ -177,7 +177,7 @@ void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd,
   }
 
   // TODO: These barriers are bogus for the checkerboard upscale...
-  cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.rtv_texture,
+  cmd->CmdTransitionImageLayout(m_internal_draw_simple_render_pass.color_texture,
                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
@@ -203,7 +203,7 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd,
     VkClearValue dsv_clear = {};
     dsv_clear.depthStencil.depth = 1.0f;
     dsv_clear.depthStencil.stencil = 0xFF;
-    std::vector<VkClearValue> clear_values = {rtv_clear, dsv_clear};
+    std::vector<VkClearValue> clear_values = {rtv_clear, rtv_clear, dsv_clear};
     cmd->CmdBeginRenderPass(render_pass, &clear_values);
     cmd->CmdSetViewport(m_target_render_area);
     cmd->CmdSetScissor(m_target_render_area);
@@ -238,7 +238,7 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd,
                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
   cmd->CmdTransitionImageLayout(
-      m_internal_as_target_draw_simple_render_pass.rtv_texture,
+      m_internal_as_target_draw_simple_render_pass.color_texture,
       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
@@ -267,7 +267,7 @@ void VkexInfoApp::VisualizeInternalTargetDelta(vkex::CommandBuffer cmd,
       m_target_texture, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
       VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
   cmd->CmdTransitionImageLayout(
-      m_internal_as_target_draw_simple_render_pass.rtv_texture,
+      m_internal_as_target_draw_simple_render_pass.color_texture,
       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);

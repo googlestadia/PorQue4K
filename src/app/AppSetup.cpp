@@ -318,3 +318,12 @@ void VkexInfoApp::ConfigureCustomSampleLocationsState() {
         vkex::DataPtr(m_subpass_sample_locations);
   }
 }
+
+void VkexInfoApp::SetupInitialConstantBufferValues() {
+  // Plumb some dummy values for the transformation matrices to prevent
+  // degenerate cases in the shader
+  m_per_object_constants.data.worldMatrix = float4x4(1.f);
+  m_per_object_constants.data.prevWorldMatrix = float4x4(1.f);
+  m_per_frame_constants.data.viewProjectionMatrix = float4x4(1.f);
+  m_per_frame_constants.data.prevViewProjectionMatrix = float4x4(1.f);
+}

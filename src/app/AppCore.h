@@ -255,6 +255,7 @@ class VkexInfoApp : public vkex::Application {
   void BuildCheckerboardMaterialSampler();
   void CheckVulkanFeaturesForPipelines();
   void ConfigureCustomSampleLocationsState();
+  void SetupInitialConstantBufferValues();
 
   // CAS.cpp
   void UpdateCASConstants(const VkExtent2D& srcExtent,

@@ -55,19 +55,19 @@ void VkexInfoApp::CheckerboardUpscale(vkex::CommandBuffer cmd,
   m_generated_shader_states[AppShaderList::CheckerboardUpscale]
       .descriptor_sets[frame_index]
       ->UpdateDescriptor(
-          1, m_checkerboard_simple_render_pass[kLeftCBIndex].rtv_texture);
+          1, m_checkerboard_simple_render_pass[kLeftCBIndex].color_texture);
   m_generated_shader_states[AppShaderList::CheckerboardUpscale]
       .descriptor_sets[frame_index]
       ->UpdateDescriptor(
-          2, m_checkerboard_simple_render_pass[kRightCBIndex].rtv_texture);
+          2, m_checkerboard_simple_render_pass[kRightCBIndex].color_texture);
 
   cmd->CmdTransitionImageLayout(
-      m_checkerboard_simple_render_pass[cb_frame_index].rtv_texture,
+      m_checkerboard_simple_render_pass[cb_frame_index].color_texture,
       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
   cmd->CmdTransitionImageLayout(
-      m_checkerboard_simple_render_pass[other_cb_index].rtv_texture,
+      m_checkerboard_simple_render_pass[other_cb_index].color_texture,
       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
@@ -110,12 +110,12 @@ void VkexInfoApp::CheckerboardUpscale(vkex::CommandBuffer cmd,
   IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kUpscaleInternal);
 
   cmd->CmdTransitionImageLayout(
-      m_checkerboard_simple_render_pass[cb_frame_index].rtv_texture,
+      m_checkerboard_simple_render_pass[cb_frame_index].color_texture,
       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
   cmd->CmdTransitionImageLayout(
-      m_checkerboard_simple_render_pass[other_cb_index].rtv_texture,
+      m_checkerboard_simple_render_pass[other_cb_index].color_texture,
       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);

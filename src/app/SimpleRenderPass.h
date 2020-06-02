@@ -9,11 +9,13 @@
  *
  */
 struct SimpleRenderPass {
-  vkex::Texture rtv_texture;
+  vkex::Texture color_texture;
+  vkex::Texture velocity_texture;
   vkex::Texture dsv_texture;
   VkClearColorValue rtv_clear_value;
   VkClearDepthStencilValue dsv_clear_value;
-  vkex::RenderTargetView rtv;
+  vkex::RenderTargetView color_rtv;
+  vkex::RenderTargetView velocity_rtv;
   vkex::DepthStencilView dsv;
   vkex::RenderPass render_pass;
 };

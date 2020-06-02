@@ -42,25 +42,67 @@ vkex::Result CreateSimpleMSRenderPass(
     create_info.image.device_local = true;
     create_info.view.derive_from_image = true;
     vkex::Result result =
-        device->CreateTexture(create_info, &simple_pass.rtv_texture);
+        device->CreateTexture(create_info, &simple_pass.color_texture);
     if (!result) {
       return result;
     }
   }
-  // RTV
+  // Color RTV
   {
     vkex::RenderTargetViewCreateInfo create_info = {};
-    create_info.format = simple_pass.rtv_texture->GetFormat();
-    create_info.samples = simple_pass.rtv_texture->GetSamples();
+    create_info.format = simple_pass.color_texture->GetFormat();
+    create_info.samples = simple_pass.color_texture->GetSamples();
     create_info.load_op = VK_ATTACHMENT_LOAD_OP_CLEAR;
     create_info.store_op = VK_ATTACHMENT_STORE_OP_STORE;
     create_info.initial_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     create_info.render_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     create_info.final_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     create_info.clear_value = simple_pass.rtv_clear_value;
-    create_info.attachment = simple_pass.rtv_texture->GetImageView();
+    create_info.attachment = simple_pass.color_texture->GetImageView();
     vkex::Result result =
-        device->CreateRenderTargetView(create_info, &simple_pass.rtv);
+        device->CreateRenderTargetView(create_info, &simple_pass.color_rtv);
+    if (!result) {
+      return result;
+    }
+  }
+  // Velocity image
+  {
+    vkex::TextureCreateInfo create_info = {};
+    create_info.image.image_type = VK_IMAGE_TYPE_2D;
+    create_info.image.format = VK_FORMAT_R16G16_SFLOAT;
+    create_info.image.extent = {width, height, 1};
+    create_info.image.mip_levels = 1;
+    create_info.image.array_layers = 1;
+    create_info.image.samples = sample_count;
+    create_info.image.tiling = VK_IMAGE_TILING_OPTIMAL;
+    create_info.image.usage_flags.bits.color_attachment = true;
+    create_info.image.usage_flags.bits.sampled = true;
+    create_info.image.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+    create_info.image.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    create_info.image.committed = true;
+    create_info.image.host_visible = false;
+    create_info.image.device_local = true;
+    create_info.view.derive_from_image = true;
+    vkex::Result result =
+        device->CreateTexture(create_info, &simple_pass.velocity_texture);
+    if (!result) {
+      return result;
+    }
+  }
+  // Velocity RTV
+  {
+    vkex::RenderTargetViewCreateInfo create_info = {};
+    create_info.format = simple_pass.velocity_texture->GetFormat();
+    create_info.samples = simple_pass.velocity_texture->GetSamples();
+    create_info.load_op = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    create_info.store_op = VK_ATTACHMENT_STORE_OP_STORE;
+    create_info.initial_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    create_info.render_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    create_info.final_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    create_info.clear_value = simple_pass.rtv_clear_value;
+    create_info.attachment = simple_pass.velocity_texture->GetImageView();
+    vkex::Result result =
+        device->CreateRenderTargetView(create_info, &simple_pass.velocity_rtv);
     if (!result) {
       return result;
     }
@@ -116,7 +158,7 @@ vkex::Result CreateSimpleMSRenderPass(
   {
     vkex::RenderPassCreateInfo create_info = {};
     create_info.flags = 0;
-    create_info.rtvs = {simple_pass.rtv};
+    create_info.rtvs = {simple_pass.color_rtv, simple_pass.velocity_rtv};
     create_info.dsv = simple_pass.dsv;
     create_info.extent = {width, height};
     vkex::Result result =
@@ -128,7 +170,12 @@ vkex::Result CreateSimpleMSRenderPass(
 
   {
     VKEX_CALL(vkex::TransitionImageLayout(
-        queue, simple_pass.rtv_texture, VK_IMAGE_LAYOUT_UNDEFINED,
+        queue, simple_pass.color_texture, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT));
+
+    VKEX_CALL(vkex::TransitionImageLayout(
+        queue, simple_pass.velocity_texture, VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT));
 
