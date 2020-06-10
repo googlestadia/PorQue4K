@@ -368,6 +368,8 @@ void VkexInfoApp::Setup() {
     // of magically knowing the binding here :p (TBH, all of that could be done
     // offline as well, but whatever)
 
+    // TODO: Bind everything every frame?
+
     auto frame_count = GetConfiguration().frame_count;
     for (uint32_t frame_index = 0; frame_index < frame_count; frame_index++) {
       auto& per_frame_data = m_per_frame_datas[frame_index];
@@ -380,9 +382,6 @@ void VkexInfoApp::Setup() {
       m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy]
           .descriptor_sets[frame_index]
           ->UpdateDescriptor(1, m_internal_draw_simple_render_pass.color_texture);
-      m_generated_shader_states[AppShaderList::InternalToTargetScaledCopy]
-          .descriptor_sets[frame_index]
-          ->UpdateDescriptor(2, m_target_texture);
 
       m_generated_shader_states[AppShaderList::InternalTargetImageDelta]
           .descriptor_sets[frame_index]
@@ -392,9 +391,6 @@ void VkexInfoApp::Setup() {
           .descriptor_sets[frame_index]
           ->UpdateDescriptor(1, constant_buffer,
                              m_image_delta_options_constants.size);
-      m_generated_shader_states[AppShaderList::InternalTargetImageDelta]
-          .descriptor_sets[frame_index]
-          ->UpdateDescriptor(2, m_target_texture);
       m_generated_shader_states[AppShaderList::InternalTargetImageDelta]
           .descriptor_sets[frame_index]
           ->UpdateDescriptor(
@@ -418,18 +414,12 @@ void VkexInfoApp::Setup() {
       m_generated_shader_states[AppShaderList::UpscalingCAS]
           .descriptor_sets[frame_index]
           ->UpdateDescriptor(1, m_internal_draw_simple_render_pass.color_texture);
-      m_generated_shader_states[AppShaderList::UpscalingCAS]
-          .descriptor_sets[frame_index]
-          ->UpdateDescriptor(2, m_target_texture);
 
       {
         m_generated_shader_states[AppShaderList::CheckerboardUpscale]
             .descriptor_sets[frame_index]
             ->UpdateDescriptor(0, constant_buffer,
                                m_cb_upscaling_constants.size);
-        m_generated_shader_states[AppShaderList::CheckerboardUpscale]
-            .descriptor_sets[frame_index]
-            ->UpdateDescriptor(3, m_target_texture);
       }
     }
   }
@@ -543,10 +533,14 @@ void VkexInfoApp::Update(double frame_elapsed_time) {
 void VkexInfoApp::Render(vkex::Application::RenderData* p_data) {
   const auto frame_index = p_data->GetFrameIndex();
 
-  uint32_t cb_frame_index = frame_index % 2;
-  m_per_frame_datas[frame_index].cb_frame_index = cb_frame_index;
+  uint32_t alternating_frame_index = frame_index % 2;
+  m_per_frame_datas[frame_index].cb_frame_index = alternating_frame_index;
 
-  UpdateCheckerboardRenderState(cb_frame_index);
+  m_current_target_texture = m_target_texture_list[alternating_frame_index];
+  m_previous_target_texture =
+      m_target_texture_list[alternating_frame_index ^ 1];
+
+  UpdateCheckerboardRenderState(alternating_frame_index);
 
   // TODO: In the future, if we have some temporal technique (TAA or DRS),
   // we might want to think about using the Viewport to generate the jitter.

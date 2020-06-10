@@ -47,6 +47,10 @@ using ImageDeltaOptionsConstants = vkex::ConstantBufferData<ImageDeltaOptions>;
 using CASUpscalingConstants = vkex::ConstantBufferData<CASData>;
 using CBUpscalingConstants = vkex::ConstantBufferData<CBResolveData>;
 
+enum MiscConstants {
+    kNumHistoryImages = 2,
+};
+
 enum ShaderPipelineType {
   Graphics = 0,
   Compute = 1,
@@ -243,6 +247,8 @@ class VkexInfoApp : public vkex::Application {
   void UpscaleInternalToTarget(vkex::CommandBuffer cmd, uint32_t frame_index);
   void VisualizeInternalTargetDelta(vkex::CommandBuffer cmd,
                                     uint32_t frame_index);
+  void RenderSceneTargetResolution(vkex::CommandBuffer cmd,
+                                   uint32_t frame_index);
 
   void DrawModel(vkex::CommandBuffer cmd);
 
@@ -286,10 +292,11 @@ class VkexInfoApp : public vkex::Application {
 
   SimpleRenderPass m_internal_draw_simple_render_pass = {};
   SimpleRenderPass m_internal_as_target_draw_simple_render_pass = {};
-  SimpleRenderPass m_checkerboard_simple_render_pass[2];
-  vkex::Texture m_target_texture = nullptr;
+  SimpleRenderPass m_checkerboard_simple_render_pass[kNumHistoryImages];
   vkex::Texture m_visualization_texture = nullptr;
-
+  vkex::Texture m_target_texture_list[kNumHistoryImages] = {nullptr, nullptr};
+  vkex::Texture m_current_target_texture = nullptr;
+  vkex::Texture m_previous_target_texture = nullptr;
   // TODO: Handle dynamic resolution?
 
   UpscalingTechniqueKey m_upscaling_technique_key = UpscalingTechniqueKey::None;
@@ -321,7 +328,7 @@ class VkexInfoApp : public vkex::Application {
   std::vector<VkAttachmentSampleLocationsEXT> m_attachment_sample_locations;
   std::vector<VkSubpassSampleLocationsEXT> m_subpass_sample_locations;
   CheckerboardSampleMode m_checkerboard_samples_mode =
-      CheckerboardSampleMode::kViewportJitter;
+      CheckerboardSampleMode::kCustomSampleLocs;
 
   vkex::Sampler m_cb_grad_adj_sampler = nullptr;
 

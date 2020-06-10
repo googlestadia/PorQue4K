@@ -61,7 +61,7 @@ struct CASData {
 struct CBResolveData {
   uint srcWidth;
   uint srcHeight;
-  uint sampleGenMode;
+  uint cbIndex;
   uint padding1;
   int ulXOffset;
   int urXOffset;

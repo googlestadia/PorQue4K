@@ -5,12 +5,11 @@ void VkexInfoApp::UpdateCheckerboardConstants(const VkExtent2D& srcExtent,
   constants.data.srcWidth = srcExtent.width;
   constants.data.srcHeight = srcExtent.height;
 
-  // checkerboard mode state
+  // Fixing to this mode for now
+  m_checkerboard_samples_mode = CheckerboardSampleMode::kCustomSampleLocs;
   if (!m_sample_locations_enabled) {
     m_checkerboard_samples_mode = CheckerboardSampleMode::kViewportJitter;
   }
-
-  constants.data.sampleGenMode = static_cast<uint>(m_checkerboard_samples_mode);
 }
 
 void VkexInfoApp::UpdateCheckerboardRenderState(uint32_t cb_frame_index) {
@@ -40,37 +39,42 @@ void VkexInfoApp::UpdateCheckerboardRenderState(uint32_t cb_frame_index) {
       m_current_sample_locations[1] = {0.25, 0.25};
     }
   }
+
+   m_cb_upscaling_constants.data.cbIndex = cb_frame_index;
 }
 
 void VkexInfoApp::CheckerboardUpscale(vkex::CommandBuffer cmd,
                                       uint32_t frame_index) {
   auto& per_frame_data = m_per_frame_datas[frame_index];
 
-  uint32_t cb_frame_index = per_frame_data.cb_frame_index;
-  uint32_t other_cb_index = cb_frame_index ^ 1;
+  const uint32_t cb_frame_index = per_frame_data.cb_frame_index;
 
-  const uint32_t kLeftCBIndex = 0;
-  const uint32_t kRightCBIndex = 1;
+  auto& cb_shader_state =
+      m_generated_shader_states[AppShaderList::CheckerboardUpscale];
+  auto& cb_render_pass =
+      m_checkerboard_simple_render_pass[cb_frame_index];
 
-  m_generated_shader_states[AppShaderList::CheckerboardUpscale]
-      .descriptor_sets[frame_index]
-      ->UpdateDescriptor(
-          1, m_checkerboard_simple_render_pass[kLeftCBIndex].color_texture);
-  m_generated_shader_states[AppShaderList::CheckerboardUpscale]
-      .descriptor_sets[frame_index]
-      ->UpdateDescriptor(
-          2, m_checkerboard_simple_render_pass[kRightCBIndex].color_texture);
+  cb_shader_state.descriptor_sets[frame_index]->UpdateDescriptor(
+      1, cb_render_pass.color_texture);
+  cb_shader_state.descriptor_sets[frame_index]->UpdateDescriptor(
+          2, cb_render_pass.velocity_texture);
+  cb_shader_state.descriptor_sets[frame_index]
+      ->UpdateDescriptor(3, m_previous_target_texture);
+  cb_shader_state.descriptor_sets[frame_index]
+      ->UpdateDescriptor(4, m_current_target_texture);
 
-  cmd->CmdTransitionImageLayout(
-      m_checkerboard_simple_render_pass[cb_frame_index].color_texture,
+  cmd->CmdTransitionImageLayout(cb_render_pass.color_texture,
       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-  cmd->CmdTransitionImageLayout(
-      m_checkerboard_simple_render_pass[other_cb_index].color_texture,
+  cmd->CmdTransitionImageLayout(cb_render_pass.velocity_texture,
       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+  cmd->CmdTransitionImageLayout(m_previous_target_texture,
+                                VK_IMAGE_LAYOUT_GENERAL,
+                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
   // TODO: In the future, we'll use depth in the custom resolve.
   // If we're using custom sample locations, we have to
@@ -85,38 +89,34 @@ void VkexInfoApp::CheckerboardUpscale(vkex::CommandBuffer cmd,
       m_constant_buffer_manager.UploadConstantsToDynamicBuffer(
           m_cb_upscaling_constants);
 
-  cmd->CmdBindPipeline(
-      m_generated_shader_states[AppShaderList::CheckerboardUpscale]
-          .compute_pipeline);
+  cmd->CmdBindPipeline(cb_shader_state.compute_pipeline);
 
   std::vector<uint32_t> dynamic_offsets = {
       checkerboard_constants_dynamic_offset};
   cmd->CmdBindDescriptorSets(
-      VK_PIPELINE_BIND_POINT_COMPUTE,
-      *(m_generated_shader_states[AppShaderList::CheckerboardUpscale]
-            .pipeline_layout),
+      VK_PIPELINE_BIND_POINT_COMPUTE, *(cb_shader_state.pipeline_layout),
       0,
-      {*(m_generated_shader_states[AppShaderList::CheckerboardUpscale]
-             .descriptor_sets[frame_index])},
+      {*(cb_shader_state.descriptor_sets[frame_index])},
       &dynamic_offsets);
 
   IssueGpuTimeStart(cmd, per_frame_data, TimerTag::kUpscaleInternal);
   {
     vkex::uint3 dispatchDims = CalculateSimpleDispatchDimensions(
-        m_generated_shader_states[AppShaderList::CheckerboardUpscale],
+        cb_shader_state,
         GetInternalResolutionExtent());
     cmd->CmdDispatch(dispatchDims.x, dispatchDims.y, dispatchDims.z);
   }
   IssueGpuTimeEnd(cmd, per_frame_data, TimerTag::kUpscaleInternal);
 
-  cmd->CmdTransitionImageLayout(
-      m_checkerboard_simple_render_pass[cb_frame_index].color_texture,
+  cmd->CmdTransitionImageLayout(cb_render_pass.color_texture,
+      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+  cmd->CmdTransitionImageLayout(cb_render_pass.velocity_texture,
       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
   cmd->CmdTransitionImageLayout(
-      m_checkerboard_simple_render_pass[other_cb_index].color_texture,
-      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+      m_previous_target_texture, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 }

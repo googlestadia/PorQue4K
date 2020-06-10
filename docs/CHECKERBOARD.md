@@ -853,21 +853,103 @@ Checkerboard resolve inputs:
 
 Independent of input, the core algorithm is:
 
-* Current frame pixels are passed through to the output
-* 'Empty' checkerboard pixels are extrapolated from current and previous results
+* If not moving, pass through pixels from current and previous checkerboards
+* If moving:
+  * 'Real' pixels are passed through to the output
+    * If filtered, bias to current checkerboard data
+  * 'Empty' checkerboard pixels are extrapolated from neighbors and previous results
     * Augmented by extra data provided by depth, velocity, and geometry IDs
+
+#### Pixel Neighborhood
+
+Each thread in the resolve shader is responsible for generating 4 pixels: 2
+'real' and 2 'reconstructed'.
+
+![Checkerboard resolve per-thread quad arrangement][cb_resolve_quad]
+
+In order to build the reconstructed pixels, we need to use information from the
+neighboring real pixels. Because of how the neighbors are arranged, we can take
+advantage of the fact that two of the neighbors are shared between our 2
+reconstructed pixels: the two real pixels that are part of the pixel quad each
+thread writes out.
+
+![Checkerboard resolve quad neighborhood][cb_resolve_neighborhood]
+
+Each reconstructed pixel is surrounded by 4 neighbors in the cardinal
+directions.
+
+To investigate:
+* Can we use shared memory to minimize loads from main memory?
+* Should we increase threadgroup size in order to take advantage of screenspace
+  proximity?
+  * Alternatively, perhaps we can figure out how to make the per-threadgroup
+    tiles have greater SIMD/CU/SQC proximity without using bigger threadgroups.
+    Something like tile-level swizzling?
+* Neighbors are currently treated equally. We could start considering them as
+  pairs, e.g. upper/lower and left/right.
 
 #### Utilizing Depth
 
-`TODO`
+`TODO - Perhaps if I had full resolution depth...`
 
 #### Utilizing Velocity
 
-`TODO`
+Right now, we use velocity in two ways with the reconstructed pixels:
 
-#### Performance Considerations 
+* Velocity vector length as an indicator of motion - If we aren't moving, just
+  pass the previous frames' pixels through
+* If we are moving, use the velocity to pick the pixel from the previous frame
 
-#### 1 Pixel per thread or 1 Quad per Thread?
+Velocity is calculated by interpolating the 'real' neighborhood values that
+surround the reconstructed pixel.
+
+To investigate:
+* Should I reproject 'real' pixels in the moving case? My guess is that it might
+  help with image stability.
+* What is the right blend between the current filtered pixel and the reprojected
+  previous pixel? Right now, I have an even blend between the two. My guess is
+  that I should weight to the previous pixel a bit more.
+  * Actually, it might be interesting to change the weight depending on how much
+    I 'trust' the filtered value. A simple average isn't as trustworthy as a
+    pixel generated with object/primitive ID information.
+* If we get better reconstruction information for our reconstructed pixel, that
+  should inform our interpolated motion vector generation.
+
+#### Performance Considerations
+
+In order to determine the performance constraints, I started by using bandwidth
+as an expected lower bound. Using 4K as a baseline, I would expect at least:
+
+* Read CB Color 1920x1080 MSAA 2x RGBA8 = ~16.6 MB
+* Read CB Velocity 1920x1080 MSAA 2x RG16 = ~16.6 MB
+* Read Previous Resolved Color 3840x2160 RGBA8 = ~33.2 MB
+* Write Resolved Color 3840x2160 RGBA8 = ~33.2 MB
+* Total render target bandwidth: ~100 MB
+
+Some of these sizes will differ based on actual app implementation. I would
+actually expect more bits-per-channel for the color targets.
+
+If we work off the 100 MB quantity, we can project the bandwidth overhead on
+Stadia Gen1. Due to Dynamic Power Management, the GPU will toggle between 400
+and 480 GBps.
+
+* 400 GBps -> 250 us
+* 480 GBps -> 208 us
+
+It seems reasonable to strive to drive our performance toward that 250 us
+number. For 1080p, we can quarter the projection: 63 us.
+
+**June 3, 2020**
+
+The very first _working_ implementation of the checkerboard resolve was
+approximately 102 us @ 1080p, and 410 us @ 4K. It used 60 VGPRs and 38 SGPRs
+(as reported by RGP).
+
+After a significant re-organization of the code, the register usage improved.
+The new shader used 52 VGPRs and 27 SGPRs. Performance @ 4K was essentially
+static at 404 us (RGP), though the in-app profiler reported a steady 380 us.
+
+##### 1 Pixel per thread or 1 Quad per Thread?
 
 The initial implementation launched had one compute thread per output pixel, in
 threadgroups of 16x16x1. Each threadgroup was processing 256 pixels. For a 1080p
@@ -892,6 +974,9 @@ exactly caused the speedup. I suspect L1 cache re-use increases because of the
 increased data locality per wavefront.
 
 It could be interesting to experiment with other pixels-per-thread counts.
+
+##### 16-bit Floats
+`TBD, implementation would save on register pressure, increasing occupancy`
 
 ## Postprocessing
 
@@ -986,3 +1071,5 @@ Carpentier, Kohei Ishiyama
 [custom_sample_locations]: images/custom_sample_locations.PNG
 [shading_location_delta]:images/shading_delta_between_sample_and_center_location.PNG
 [param_interp_compare]:images/parameter_interpolation_compare.PNG
+[cb_resolve_quad]:images/checkerboard_resolve_per_thread_quad_arrangement.PNG
+[cb_resolve_neighborhood]:images/checkerboard_resolve_quad_neighborhood.PNG

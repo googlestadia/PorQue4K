@@ -56,19 +56,27 @@ void VkexInfoApp::SetupImagesAndRenderPasses(const VkExtent2D present_extent,
     create_info.image.device_local = true;
     create_info.view.derive_from_image = true;
 
-    { VKEX_CALL(GetDevice()->CreateTexture(create_info, &m_target_texture)); }
     {
+      for (uint32_t target_texture_index = 0;
+           target_texture_index < kNumHistoryImages; target_texture_index++) {
+        VKEX_CALL(GetDevice()->CreateTexture(
+            create_info, &m_target_texture_list[target_texture_index]));
+      }
+
       VKEX_CALL(
           GetDevice()->CreateTexture(create_info, &m_visualization_texture));
     }
   }
 
   {
-    VKEX_CALL(vkex::TransitionImageLayout(
-        GetGraphicsQueue(), m_target_texture, VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT));
-  }
-  {
+    for (uint32_t target_texture_index = 0;
+         target_texture_index < kNumHistoryImages; target_texture_index++) {
+      VKEX_CALL(vkex::TransitionImageLayout(
+          GetGraphicsQueue(), m_target_texture_list[target_texture_index],
+          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+          VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT));
+    }
+
     VKEX_CALL(vkex::TransitionImageLayout(
         GetGraphicsQueue(), m_visualization_texture, VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT));
@@ -86,15 +94,14 @@ void VkexInfoApp::SetupImagesAndRenderPasses(const VkExtent2D present_extent,
       }
     }
 
-    VKEX_CALL(CreateSimpleMSRenderPass(
-        GetDevice(), GetGraphicsQueue(), checkerboard_width,
-        checkerboard_height, color_format, depth_format, VK_SAMPLE_COUNT_2_BIT,
-        extra_depth_usage_flags, &m_checkerboard_simple_render_pass[0]));
-
-    VKEX_CALL(CreateSimpleMSRenderPass(
-        GetDevice(), GetGraphicsQueue(), checkerboard_width,
-        checkerboard_height, color_format, depth_format, VK_SAMPLE_COUNT_2_BIT,
-        extra_depth_usage_flags, &m_checkerboard_simple_render_pass[1]));
+    for (uint32_t checkerboard_index = 0;
+         checkerboard_index < kNumHistoryImages; checkerboard_index++) {
+      VKEX_CALL(CreateSimpleMSRenderPass(
+          GetDevice(), GetGraphicsQueue(), checkerboard_width,
+          checkerboard_height, color_format, depth_format,
+          VK_SAMPLE_COUNT_2_BIT, extra_depth_usage_flags,
+          &m_checkerboard_simple_render_pass[checkerboard_index]));
+    }
   }
 }
 
@@ -235,6 +242,12 @@ void VkexInfoApp::CheckVulkanFeaturesForPipelines() {
     if (vkex::Contains(GetDevice()->GetLoadedExtensions(),
                        sample_locations_name)) {
       m_sample_locations_enabled = true;
+    } else {
+      // We could use viewport jitter, but it complicates the solution.
+      // We could consider re-adding support in the future.
+      VKEX_LOG_ERROR(VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME
+                     " not enabled, checkerboard rendering currently requires "
+                     "the extension.");
     }
 
     // If variableSampleLocations is supported, we aren't obliged

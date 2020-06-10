@@ -46,6 +46,10 @@ void VkexInfoApp::UpdateCASConstants(const VkExtent2D& srcExtent,
 void VkexInfoApp::CASUpscale(vkex::CommandBuffer cmd, uint32_t frame_index) {
   auto& per_frame_data = m_per_frame_datas[frame_index];
 
+  m_generated_shader_states[AppShaderList::UpscalingCAS]
+      .descriptor_sets[frame_index]
+      ->UpdateDescriptor(2, m_current_target_texture);
+
   auto cas_dynamic_offset =
       m_constant_buffer_manager.UploadConstantsToDynamicBuffer(
           m_cas_upscaling_constants);
