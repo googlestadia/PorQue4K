@@ -144,7 +144,7 @@ endif(BUILD_SHADERS)
 if(GGP)
     # Needed?
     add_compile_definitions(VKEX_LINUX_GGP=1)
-    add_compile_definitions(__yeti__=1)
+    add_compile_definitions(__ggp__=1)
 endif()
 
 add_subdirectory(third_party/glfw EXCLUDE_FROM_ALL)

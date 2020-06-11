@@ -22,7 +22,7 @@
 #if ! defined(VULKAN_H_)
 # include <vulkan/vulkan.h>
 #ifdef VK_USE_PLATFORM_GGP_KHR
-# include <vulkan/vulkan_yeti.h>
+# include <vulkan/vulkan_ggp.h>
 #endif
 #endif
 
