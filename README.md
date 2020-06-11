@@ -103,7 +103,8 @@ cares, that's not the point of the sample.
 See the [Techniques Hub document](docs/TECHNIQUES.md).
 
 # Contributing
-[Contribution guidelines for this project](docs/CONTRIBUTING.md).
+Please see the [standard Google Contribution guidelines](CONTRIBUTING.md) and
+[project-specific Contribution guidelines](docs/CONTRIBUTING.md).
 
 # DirectXShaderCompiler Info
 This project uses [DXC](https://github.com/microsoft/DirectXShaderCompiler) to
@@ -119,3 +120,5 @@ Currently, the project has been verified against
 * [ndeakin](https://github.com/ndeakin)
 * [olegat](https://github.com/olegat)
 * [robbiesri](https://github.com/robbiesri)
+
+This is not an officially supported Google product.
