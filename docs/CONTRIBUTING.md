@@ -2,9 +2,9 @@
 
 ## Upscaling Technique
 
-If you are interested in implementing an upscaling technique, 
-feel free to pick out out from the
-[list of `upscaler` issues](https://github.com/robbiesri/VulkanPorQue4K/labels/upscaler),
+If you are interested in implementing an upscaling technique, feel free to pick
+out out from the
+[list of `upscaler` issues](https://github.com/googlestadia/PorQue4K/labels/upscaler),
 and assign yourself.
 
 Alternatively, if you'd like to implement a technique that isn't listed,
@@ -53,11 +53,11 @@ In your new Markdown file, describe the technique you implemented with:
 There is plenty of general infrastructure work that needs to be done on the
 project!
 
-* [Non-upscaler Enhancements](
-  https://github.com/robbiesri/VulkanPorQue4K/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement+-label%3Aupscaler)
+* [Enhancements](
+  https://github.com/googlestadia/PorQue4K/labels/enhancement)
 \- These are issues that would provide project enhancements that are not
 necessarily tied _directly_ to upscaling.
-* [Cleanup](https://github.com/robbiesri/VulkanPorQue4K/issues?q=is%3Aissue+is%3Aopen+label%3Acleanup)
+* [Cleanup](https://github.com/googlestadia/PorQue4K/labels/cleanup)
 \- Quality-of-life changes needed to improve the project
 
 ## Shared Work Etiquette

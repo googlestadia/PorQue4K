@@ -1,11 +1,12 @@
-# VulkanPorQue4K
+# PorQue4K
 
-4K yee  
-We out here, vibin'
+Upscaling techniques on Vulkan, yee. The original project intent was to help
+with upscaling to 4K, but none of the techniques are 4K specific.
 
 # Building
 
 Before doing anything, make sure your submodules are up-to-date!
+
 ```
 $ git submodule update --init --recursive
 ```
@@ -28,6 +29,9 @@ Studio 2017 solution + projects.
 ```
 
 ## Build for GGP
+
+You'll need access to the Stadia SDK, which is currently limited to the partners
+that have access to the SDK. 
 
 ### Deploy Assets
 
@@ -89,15 +93,16 @@ TBD - Help!
 ## Windows / Linux
 
 Currently only runs windowed, and supports 1080p and 2160p (more in the future).
+
 ```
 4KApp --height 2160
 ```
 
 ## GGP
 
-Swapchain resolution is detected during app initialization.
-The sample currently doesn't support swapchain resolution change, because who
-cares, that's not the point of the sample.
+Swapchain resolution is detected during app initialization. The sample currently
+doesn't support swapchain resolution change, because that's not the point of the
+sample.
 
 # Upscaling Techniques
 See the [Techniques Hub document](docs/TECHNIQUES.md).
@@ -117,6 +122,7 @@ Currently, the project has been verified against
 
 * [apazylbe](https://github.com/apazylbe)
 * [chaoticbob](https://github.com/chaoticbob)
+* [jfroy](https://github.com/jfroy)
 * [ndeakin](https://github.com/ndeakin)
 * [olegat](https://github.com/olegat)
 * [robbiesri](https://github.com/robbiesri)
