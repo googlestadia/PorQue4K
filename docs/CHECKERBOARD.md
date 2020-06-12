@@ -108,7 +108,7 @@ sample offset horizontally to create the checkerboard pattern.
 
 However, a drawback of this setup is that the gradients are non-uniformly
 transformed across ddx and ddy. More importantly, we don't have easy access to
-EQAA or CSAA on Stadia or Vulkan!
+EQAA or CSAA in Vulkan!
 
 ![Comparison of gradients in half-width EQAA][eqaa_gradients]
 
@@ -151,7 +151,7 @@ A feature that is popular with modern checkerboard is having full target
 resolution coverage/depth samples in order to get full resolution geometry
 information. However, the ability to mix attachments of different sample counts,
 along with choosing with samples invoke the pixel shader is not available
-broadly in Vulkan, and not available on Stadia.
+broadly in Vulkan.
 
 #### Render Pass
 
@@ -427,7 +427,7 @@ This conclusion is confirmed in [ElMansouri16]
 
 There are platforms that allow for a 2x2 matrix to be programmed in order to
 adjust gradient calculations outside the shader (see [Wihlidal17]). This
-feature is not supported on Stadia.
+feature is not supported on any known Vulkan extensions.
 
 ##### Extra: Sample Location Shading and Partial Derivatives
 It's actually hard to determine the actual behavior for derivatives generated
@@ -595,7 +595,8 @@ frame basis), we are required to do some bookkeeping if
 but we have to inform subpasses about sample locations, probably so the
 implementation or validation can enforce this requirement.
 
-On Stadia, `variableSampleLocations` is set to `VK_TRUE`, so some of the
+`variableSampleLocations` is set to `VK_TRUE` on
+[most Vulkan implementations][variableSampleLocations_vulkan_db], so some of the
 renderpass requirements are relaxed. However, if your Vulkan backend is
 cross-platform, you'll have to keep an eye on these properties.
 
@@ -929,15 +930,13 @@ as an expected lower bound. Using 4K as a baseline, I would expect at least:
 Some of these sizes will differ based on actual app implementation. I would
 actually expect more bits-per-channel for the color targets.
 
-If we work off the 100 MB quantity, we can project the bandwidth overhead on
-Stadia Gen1. Due to Dynamic Power Management, the GPU will toggle between 400
-and 480 GBps.
+If we work off the 100 MB quantity, we can project the bandwidth overhead based
+on a reference [Vega 56][vega56_info].
 
-* 400 GBps -> 250 us
-* 480 GBps -> 208 us
+* 410 GBps -> 244 us
 
-It seems reasonable to strive to drive our performance toward that 250 us
-number. For 1080p, we can quarter the projection: 63 us.
+It seems reasonable to strive to drive our performance toward that 244 us
+number. For 1080p, we can quarter the projection: 61 us.
 
 **June 3, 2020**
 
@@ -969,9 +968,9 @@ average wavefront time of ~12.4 us.
 By writing out 4 pixels per thread, we save 44% of dispatch time, even though
 our wavefront time roughly doubles.
 
-Currently, I don't have instruction timing data on Stadia, so we can't say what
-exactly caused the speedup. I suspect L1 cache re-use increases because of the
-increased data locality per wavefront.
+Currently, I have some difficult obtaining instruction timing data, so I can't
+say what exactly caused the speedup. I suspect L1 cache re-use increases because
+of the increased data locality per wavefront.
 
 It could be interesting to experiment with other pixels-per-thread counts.
 
@@ -1061,6 +1060,9 @@ Carpentier, Kohei Ishiyama
 
 [NV_framebuffer_mixed_samples]: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VK_NV_framebuffer_mixed_samples.html
 [AMD_mixed_attachment_samples]: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VK_AMD_mixed_attachment_samples.html
+
+[variableSampleLocations_vulkan_db]: https://vulkan.gpuinfo.org/displayextensionproperty.php?name=variableSampleLocations
+[vega56_info]: https://www.amd.com/en/products/graphics/radeon-rx-vega-56
 
 [simple_cb]: images/simple_cb_resolve_example.PNG
 [eqaa_pixel_quad]: images/eqaa_half_width_pixel_quad.PNG
