@@ -1013,7 +1013,7 @@ making sure the _right_ samples invoke the fragment shader.
 
 ## Vulkan/Platform Requests
 
-* Vulkan could offer a facility to _force_ `sampler` interpolation for
+* Vulkan could offer a facility to _force_ `sample` interpolation for
 parameters (aka varyings) in graphics pipelines. Right now, we can force sample
 location shading at the API level, but parameter interpolation can't be
 controlled/enforced.
@@ -1022,7 +1022,7 @@ controlled/enforced.
 
 * `VK_EXT_sample_locations` allows for sample location positions and
 interpolation, which the spec says is 'undefined' when using with
-`VK_EXT_sample_locations`. Maybe a listing of pre-determined locations that
+`sample` interpolation modifiers. Maybe a listing of pre-determined locations that
 will work could be nice.
 
 * Make it easier to see how an extension interacts with the spec. Scanning a
