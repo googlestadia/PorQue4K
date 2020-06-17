@@ -111,7 +111,7 @@ void VkexInfoApp::Setup() {
 
   {
     m_selected_upscaling_technique_index = 0;
-    m_upscaling_technique_key = UpscalingTechniqueKey::None;
+    m_upscaling_technique_key = UpscalingTechniqueKey::kuNone;
   }
 
   SetupImagesAndRenderPasses(GetPresentResolutionExtent(),
