@@ -107,7 +107,7 @@ struct CPULightInfo {
 // TODO: Rename these enums into something more sane...
 
 enum UpscalingTechniqueKey {
-  None = 0,
+  kuNone = 0,
   CAS = 1,
   Checkerboard = 2,
   kuCount,
@@ -299,7 +299,7 @@ class VkexInfoApp : public vkex::Application {
   vkex::Texture m_previous_target_texture = nullptr;
   // TODO: Handle dynamic resolution?
 
-  UpscalingTechniqueKey m_upscaling_technique_key = UpscalingTechniqueKey::None;
+  UpscalingTechniqueKey m_upscaling_technique_key = UpscalingTechniqueKey::kuNone;
   PresentResolutionKey m_present_resolution_key = PresentResolutionKey::kpCount;
   ResolutionInfoKey m_internal_resolution_key = ResolutionInfoKey::krCount;
   CBResolutionInfoKey m_internal_cb_resolution_key =

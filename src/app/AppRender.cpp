@@ -45,7 +45,7 @@ void VkexInfoApp::RenderInternalAndTarget(vkex::CommandBuffer cmd,
       void* render_pass_begin_pNext = nullptr;
 
       switch (GetUpscalingTechnique()) {
-        case UpscalingTechniqueKey::None:
+        case UpscalingTechniqueKey::kuNone:
         case UpscalingTechniqueKey::CAS: {
           render_pass = m_internal_draw_simple_render_pass.render_pass;
           pipeline = &m_generated_shader_states[AppShaderList::Geometry];
@@ -164,7 +164,7 @@ void VkexInfoApp::UpscaleInternalToTarget(vkex::CommandBuffer cmd,
       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
   switch (GetUpscalingTechnique()) {
-    case UpscalingTechniqueKey::None: {
+    case UpscalingTechniqueKey::kuNone: {
       NaiveUpscale(cmd, frame_index);
       break;
     }

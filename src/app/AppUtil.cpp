@@ -59,7 +59,7 @@ struct PresentResolutionChain {
 
 static UpscalingTechniqueInfo
     s_upscaling_techniques[UpscalingTechniqueKey::kuCount] = {
-        {UpscalingTechniqueKey::None, "None"},
+        {UpscalingTechniqueKey::kuNone, "None"},
         {UpscalingTechniqueKey::CAS, "FidelityFX CAS"},
         {UpscalingTechniqueKey::Checkerboard, "Checkerboard"},
 };
@@ -179,7 +179,7 @@ VkExtent2D VkexInfoApp::GetInternalResolutionExtent() {
   VkExtent2D extent = {};
 
   switch (GetUpscalingTechnique()) {
-    case UpscalingTechniqueKey::None:
+    case UpscalingTechniqueKey::kuNone:
     case UpscalingTechniqueKey::CAS: {
       extent = s_resolution_infos[m_internal_resolution_key].resolution_extent;
       break;
@@ -477,7 +477,7 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index) {
       }
       {
         switch (GetUpscalingTechnique()) {
-          case UpscalingTechniqueKey::None:
+          case UpscalingTechniqueKey::kuNone:
           case UpscalingTechniqueKey::CAS: {
             std::vector<const char*> resolution_items;
             BuildInternalResolutionTextList(resolution_items);
