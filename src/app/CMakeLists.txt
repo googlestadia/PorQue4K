@@ -100,8 +100,8 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 if(GGP)
-  target_link_libraries(${PROJECT_NAME} 
-    PRIVATE ${GGP_LIBRARY_PATH}/lib/libggp.so	
+  target_link_libraries(${PROJECT_NAME}
+    PRIVATE ${GGP_LIBRARY_PATH}/libggp.so
             dl
             pthread)
 endif()
