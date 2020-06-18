@@ -3,6 +3,8 @@
 Upscaling techniques on Vulkan, yee. The original project intent was to help
 with upscaling to 4K, but none of the techniques are 4K specific.
 
+![Screenshot of app running on Stadia @ 4K][glamour_shot]
+
 # Building
 
 Before doing anything, make sure your submodules are up-to-date!
@@ -111,6 +113,10 @@ See the [Techniques Hub document](docs/TECHNIQUES.md).
 Please see the [standard Google Contribution guidelines](CONTRIBUTING.md) and
 [project-specific Contribution guidelines](docs/CONTRIBUTING.md).
 
+# Compatible Stadia SDK Version
+
+The most recent Stadia SDK version validated for this project was 1.45.
+
 # DirectXShaderCompiler Info
 This project uses [DXC](https://github.com/microsoft/DirectXShaderCompiler) to
 compile HLSL shaders to SPIR-V.
@@ -122,9 +128,12 @@ Currently, the project has been verified against
 
 * [apazylbe](https://github.com/apazylbe)
 * [chaoticbob](https://github.com/chaoticbob)
+* [krmoule](https://github.com/krmoule)
 * [jfroy](https://github.com/jfroy)
 * [ndeakin](https://github.com/ndeakin)
 * [olegat](https://github.com/olegat)
 * [robbiesri](https://github.com/robbiesri)
 
 This is not an officially supported Google product.
+
+[glamour_shot]: docs/images/glamour_ggp_4k_stream.PNG
