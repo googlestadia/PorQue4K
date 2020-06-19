@@ -197,19 +197,26 @@ void CPhysicalDevice::InitializeExtensionProperties() {
 }
 
 void CPhysicalDevice::InitializeFeatures() {
-    m_extension_owned_features.shader_float16_int8_features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT16_INT8_FEATURES_KHR };
-    m_extension_owned_features.storage_16bit_features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES };
-    m_extension_owned_features.storage_8bit_features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR };
+  m_extension_owned_features.shader_float16_int8_features = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT16_INT8_FEATURES_KHR };
+  m_extension_owned_features.storage_16bit_features = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES };
+  m_extension_owned_features.storage_8bit_features = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR };
 
-    m_extension_owned_features.shader_float16_int8_features.pNext = &m_extension_owned_features.storage_16bit_features;
-    m_extension_owned_features.storage_16bit_features.pNext = &m_extension_owned_features.storage_8bit_features;
+  m_extension_owned_features.shader_float16_int8_features.pNext =
+    &m_extension_owned_features.storage_16bit_features;
+  m_extension_owned_features.storage_16bit_features.pNext =
+    &m_extension_owned_features.storage_8bit_features;
 
-    m_vk_physical_device_features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
-    m_vk_physical_device_features.pNext = &m_extension_owned_features.shader_float16_int8_features;
+  m_vk_physical_device_features = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+  m_vk_physical_device_features.pNext =
+    &m_extension_owned_features.shader_float16_int8_features;
 
-    vkex::GetPhysicalDeviceFeatures2(
-        m_create_info.vk_object,
-        &m_vk_physical_device_features);
+  vkex::GetPhysicalDeviceFeatures2(
+    m_create_info.vk_object,
+    &m_vk_physical_device_features);
 }
 
 bool CPhysicalDevice::GetQueueFamilyProperties(
@@ -412,31 +419,36 @@ vkex::Result CDevice::InitializeQueueRequests()
 
 void CDevice::InitializeExtensionFeatures()
 {
-    m_create_info.app_p_next = m_create_info.p_next;
-    void* current_p_next = const_cast<void *>(m_create_info.p_next);
+  m_create_info.app_p_next = m_create_info.p_next;
+  void* current_p_next = const_cast<void *>(m_create_info.p_next);
 
-    const PhysicalDeviceExtensionFeatures& queried_extension_features = m_create_info.physical_device->GetPhysicalDeviceExtensionFeatures();
-    PhysicalDeviceExtensionFeatures& requested_extension_features = m_create_info.extension_features;
+  const PhysicalDeviceExtensionFeatures& queried_extension_features =
+    m_create_info.physical_device->GetPhysicalDeviceExtensionFeatures();
+  PhysicalDeviceExtensionFeatures& requested_extension_features =
+    m_create_info.extension_features;
 
-    if (Contains(m_create_info.extensions, std::string(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME))) {
-        requested_extension_features.shader_float16_int8_features = queried_extension_features.shader_float16_int8_features;
-        requested_extension_features.shader_float16_int8_features.pNext = current_p_next;
-        current_p_next = &(requested_extension_features.shader_float16_int8_features);
-    }
+  if (Contains(m_create_info.extensions, std::string(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME))) {
+    requested_extension_features.shader_float16_int8_features =
+      queried_extension_features.shader_float16_int8_features;
+    requested_extension_features.shader_float16_int8_features.pNext = current_p_next;
+    current_p_next = &(requested_extension_features.shader_float16_int8_features);
+  }
 
-    if (Contains(m_create_info.extensions, std::string(VK_KHR_16BIT_STORAGE_EXTENSION_NAME))) {
-        requested_extension_features.storage_16bit_features = queried_extension_features.storage_16bit_features;
-        requested_extension_features.storage_16bit_features.pNext = current_p_next;
-        current_p_next = &(requested_extension_features.storage_16bit_features);
-    }
+  if (Contains(m_create_info.extensions, std::string(VK_KHR_16BIT_STORAGE_EXTENSION_NAME))) {
+    requested_extension_features.storage_16bit_features =
+      queried_extension_features.storage_16bit_features;
+    requested_extension_features.storage_16bit_features.pNext = current_p_next;
+    current_p_next = &(requested_extension_features.storage_16bit_features);
+  }
 
-    if (Contains(m_create_info.extensions, std::string(VK_KHR_8BIT_STORAGE_EXTENSION_NAME))) {
-        requested_extension_features.storage_8bit_features = queried_extension_features.storage_8bit_features;
-        requested_extension_features.storage_8bit_features.pNext = current_p_next;
-        current_p_next = &(requested_extension_features.storage_8bit_features);
-    }
+  if (Contains(m_create_info.extensions, std::string(VK_KHR_8BIT_STORAGE_EXTENSION_NAME))) {
+    requested_extension_features.storage_8bit_features =
+      queried_extension_features.storage_8bit_features;
+    requested_extension_features.storage_8bit_features.pNext = current_p_next;
+    current_p_next = &(requested_extension_features.storage_8bit_features);
+  }
 
-    m_create_info.p_next = current_p_next;
+  m_create_info.p_next = current_p_next;
 }
 
 vkex::Result CDevice::InitializeQueues()

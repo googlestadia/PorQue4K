@@ -50,9 +50,9 @@ struct PhysicalDeviceCreateInfo {
  *
  */
 struct PhysicalDeviceExtensionFeatures {
-    VkPhysicalDeviceFloat16Int8FeaturesKHR shader_float16_int8_features;
-    VkPhysicalDevice16BitStorageFeaturesKHR storage_16bit_features;
-    VkPhysicalDevice8BitStorageFeaturesKHR storage_8bit_features;
+  VkPhysicalDeviceFloat16Int8FeaturesKHR shader_float16_int8_features;
+  VkPhysicalDevice16BitStorageFeaturesKHR storage_16bit_features;
+  VkPhysicalDevice8BitStorageFeaturesKHR storage_8bit_features;
 };
 
 /** @class IPhysicalDevice
@@ -141,7 +141,7 @@ public:
    *
    */
   const PhysicalDeviceExtensionFeatures& GetPhysicalDeviceExtensionFeatures() const {
-      return m_extension_owned_features;
+    return m_extension_owned_features;
   }
 
   /** @fn GetVkApiVersion
