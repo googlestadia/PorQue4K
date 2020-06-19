@@ -419,7 +419,7 @@ vkex::Result CDevice::InitializeQueueRequests()
 
 void CDevice::InitializeExtensionFeatures()
 {
-  void* current_p_next = const_cast<void *>(m_create_info.p_next);
+  void* p_next_front = const_cast<void *>(m_create_info.p_next);
 
   const PhysicalDeviceExtensionFeatures& queried_extension_features =
     m_create_info.physical_device->GetPhysicalDeviceExtensionFeatures();
@@ -429,25 +429,25 @@ void CDevice::InitializeExtensionFeatures()
   if (Contains(m_create_info.extensions, std::string(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME))) {
     requested_extension_features.shader_float16_int8_features =
       queried_extension_features.shader_float16_int8_features;
-    requested_extension_features.shader_float16_int8_features.pNext = current_p_next;
-    current_p_next = &(requested_extension_features.shader_float16_int8_features);
+    requested_extension_features.shader_float16_int8_features.pNext = p_next_front;
+    p_next_front = &(requested_extension_features.shader_float16_int8_features);
   }
 
   if (Contains(m_create_info.extensions, std::string(VK_KHR_16BIT_STORAGE_EXTENSION_NAME))) {
     requested_extension_features.storage_16bit_features =
       queried_extension_features.storage_16bit_features;
-    requested_extension_features.storage_16bit_features.pNext = current_p_next;
-    current_p_next = &(requested_extension_features.storage_16bit_features);
+    requested_extension_features.storage_16bit_features.pNext = p_next_front;
+    p_next_front = &(requested_extension_features.storage_16bit_features);
   }
 
   if (Contains(m_create_info.extensions, std::string(VK_KHR_8BIT_STORAGE_EXTENSION_NAME))) {
     requested_extension_features.storage_8bit_features =
       queried_extension_features.storage_8bit_features;
-    requested_extension_features.storage_8bit_features.pNext = current_p_next;
-    current_p_next = &(requested_extension_features.storage_8bit_features);
+    requested_extension_features.storage_8bit_features.pNext = p_next_front;
+    p_next_front = &(requested_extension_features.storage_8bit_features);
   }
 
-  m_create_info.p_next = current_p_next;
+  m_create_info.p_next = p_next_front;
 }
 
 vkex::Result CDevice::InitializeQueues()
