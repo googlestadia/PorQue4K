@@ -62,12 +62,7 @@ vkex::Result CPhysicalDevice::InternalCreate(
   InitializeExtensionProperties();
 
   // Features
-  {
-    m_vk_physical_device_features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
-    vkex::GetPhysicalDeviceFeatures2(
-      m_create_info.vk_object, 
-      &m_vk_physical_device_features);
-  }
+  InitializeFeatures();
 
   // Queue family properties
   {
@@ -199,6 +194,22 @@ void CPhysicalDevice::InitializeExtensionProperties() {
                                          &properties_2);
     }
   }
+}
+
+void CPhysicalDevice::InitializeFeatures() {
+    m_extension_owned_features.shader_float16_int8_features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT16_INT8_FEATURES_KHR };
+    m_extension_owned_features.storage_16bit_features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES };
+    m_extension_owned_features.storage_8bit_features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR };
+
+    m_extension_owned_features.shader_float16_int8_features.pNext = &m_extension_owned_features.storage_16bit_features;
+    m_extension_owned_features.storage_16bit_features.pNext = &m_extension_owned_features.storage_8bit_features;
+
+    m_vk_physical_device_features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+    m_vk_physical_device_features.pNext = &m_extension_owned_features.shader_float16_int8_features;
+
+    vkex::GetPhysicalDeviceFeatures2(
+        m_create_info.vk_object,
+        &m_vk_physical_device_features);
 }
 
 bool CPhysicalDevice::GetQueueFamilyProperties(

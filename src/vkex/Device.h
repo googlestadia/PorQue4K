@@ -203,6 +203,11 @@ private:
    */
   void InitializeExtensionProperties();
 
+  /** @fn InitializeFeatures
+   *
+   */
+  void InitializeFeatures();
+
   /** @fn SetInstance
    *
    */
@@ -227,6 +232,12 @@ private:
   struct {
     VkPhysicalDeviceSampleLocationsPropertiesEXT sample_locations_properties;
   } m_extension_owned_properties;
+
+  struct {
+      VkPhysicalDeviceFloat16Int8FeaturesKHR shader_float16_int8_features;
+      VkPhysicalDevice16BitStorageFeaturesKHR storage_16bit_features;
+      VkPhysicalDevice8BitStorageFeaturesKHR storage_8bit_features;
+  } m_extension_owned_features;
 
   mutable std::string                         m_descriptive_name;
 };
