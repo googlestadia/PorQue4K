@@ -410,6 +410,35 @@ vkex::Result CDevice::InitializeQueueRequests()
   return vkex::Result::Success;
 }
 
+void CDevice::InitializeExtensionFeatures()
+{
+    m_create_info.app_p_next = m_create_info.p_next;
+    void* current_p_next = const_cast<void *>(m_create_info.p_next);
+
+    const PhysicalDeviceExtensionFeatures& queried_extension_features = m_create_info.physical_device->GetPhysicalDeviceExtensionFeatures();
+    PhysicalDeviceExtensionFeatures& requested_extension_features = m_create_info.extension_features;
+
+    if (Contains(m_create_info.extensions, std::string(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME))) {
+        requested_extension_features.shader_float16_int8_features = queried_extension_features.shader_float16_int8_features;
+        requested_extension_features.shader_float16_int8_features.pNext = current_p_next;
+        current_p_next = &(requested_extension_features.shader_float16_int8_features);
+    }
+
+    if (Contains(m_create_info.extensions, std::string(VK_KHR_16BIT_STORAGE_EXTENSION_NAME))) {
+        requested_extension_features.storage_16bit_features = queried_extension_features.storage_16bit_features;
+        requested_extension_features.storage_16bit_features.pNext = current_p_next;
+        current_p_next = &(requested_extension_features.storage_16bit_features);
+    }
+
+    if (Contains(m_create_info.extensions, std::string(VK_KHR_8BIT_STORAGE_EXTENSION_NAME))) {
+        requested_extension_features.storage_8bit_features = queried_extension_features.storage_8bit_features;
+        requested_extension_features.storage_8bit_features.pNext = current_p_next;
+        current_p_next = &(requested_extension_features.storage_8bit_features);
+    }
+
+    m_create_info.p_next = current_p_next;
+}
+
 vkex::Result CDevice::InitializeQueues()
 {
   std::vector<const void*> look_up_keys;
@@ -542,6 +571,8 @@ vkex::Result CDevice::InternalCreate(
     m_create_info.enabled_features.pipelineStatisticsQuery  = VK_TRUE;
     m_create_info.enabled_features.samplerAnisotropy        = VK_TRUE;
     m_create_info.enabled_features.sampleRateShading        = VK_TRUE;
+
+    InitializeExtensionFeatures();
   }
 
   // Create info

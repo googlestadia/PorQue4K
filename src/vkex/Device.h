@@ -46,6 +46,15 @@ struct PhysicalDeviceCreateInfo {
   VkPhysicalDevice  vk_object;
 };
 
+/** @struct PhysicalDeviceExtensionFeatures
+ *
+ */
+struct PhysicalDeviceExtensionFeatures {
+    VkPhysicalDeviceFloat16Int8FeaturesKHR shader_float16_int8_features;
+    VkPhysicalDevice16BitStorageFeaturesKHR storage_16bit_features;
+    VkPhysicalDevice8BitStorageFeaturesKHR storage_8bit_features;
+};
+
 /** @class IPhysicalDevice
  *
  */ 
@@ -126,6 +135,13 @@ public:
    */
   const VkPhysicalDeviceFeatures2& GetPhysicalDeviceFeatures() const {
     return m_vk_physical_device_features;
+  }
+
+  /** @fn GetPhysicalDeviceExtensionFeatures
+   *
+   */
+  const PhysicalDeviceExtensionFeatures& GetPhysicalDeviceExtensionFeatures() const {
+      return m_extension_owned_features;
   }
 
   /** @fn GetVkApiVersion
@@ -233,11 +249,7 @@ private:
     VkPhysicalDeviceSampleLocationsPropertiesEXT sample_locations_properties;
   } m_extension_owned_properties;
 
-  struct {
-      VkPhysicalDeviceFloat16Int8FeaturesKHR shader_float16_int8_features;
-      VkPhysicalDevice16BitStorageFeaturesKHR storage_16bit_features;
-      VkPhysicalDevice8BitStorageFeaturesKHR storage_8bit_features;
-  } m_extension_owned_features;
+  PhysicalDeviceExtensionFeatures m_extension_owned_features;
 
   mutable std::string                         m_descriptive_name;
 };
@@ -263,6 +275,8 @@ struct DeviceCreateInfo {
   std::vector<std::string>              extensions;
   std::vector<std::string>              optional_extensions;
   VkPhysicalDeviceFeatures              enabled_features;
+  PhysicalDeviceExtensionFeatures       extension_features;
+  const void*                           app_p_next;
   bool                                  safe_values;
 };
 
@@ -837,6 +851,11 @@ private:
    *
    */
   vkex::Result InitializeQueueRequests();
+
+  /** @fn InitializeExtensionFeatures
+   *
+   */
+  void InitializeExtensionFeatures();
 
   /** @fn InitializeQueues
    *
