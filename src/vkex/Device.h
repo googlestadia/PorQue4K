@@ -276,7 +276,6 @@ struct DeviceCreateInfo {
   std::vector<std::string>              optional_extensions;
   VkPhysicalDeviceFeatures              enabled_features;
   PhysicalDeviceExtensionFeatures       extension_features;
-  const void*                           app_p_next;
   bool                                  safe_values;
 };
 

@@ -419,7 +419,6 @@ vkex::Result CDevice::InitializeQueueRequests()
 
 void CDevice::InitializeExtensionFeatures()
 {
-  m_create_info.app_p_next = m_create_info.p_next;
   void* current_p_next = const_cast<void *>(m_create_info.p_next);
 
   const PhysicalDeviceExtensionFeatures& queried_extension_features =
