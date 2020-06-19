@@ -164,6 +164,21 @@ void VkexInfoApp::Setup() {
       create_info.dsv_format =
           m_internal_draw_simple_render_pass.dsv->GetFormat();
       create_info.render_pass = m_internal_draw_simple_render_pass.render_pass;
+      {
+        VkPipelineColorBlendAttachmentState vk_state = {};
+        vk_state.colorWriteMask =
+            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+        create_info.color_blend_attachment_states =
+            vkex::ColorBlendAttachmentStates();
+        for (size_t color_attach_index = 0;
+             color_attach_index < create_info.render_pass->GetRtvs().size();
+             color_attach_index++) {
+          create_info.color_blend_attachment_states.AddState(vk_state);
+        }
+      }
+
       shader_inputs[AppShaderList::Geometry].graphics_pipeline_create_info =
           create_info;
     }
@@ -261,6 +276,20 @@ void VkexInfoApp::Setup() {
           m_checkerboard_simple_render_pass[0].dsv->GetFormat();
       create_info.render_pass =
           m_checkerboard_simple_render_pass[0].render_pass;
+      {
+        VkPipelineColorBlendAttachmentState vk_state = {};
+        vk_state.colorWriteMask =
+            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+        create_info.color_blend_attachment_states =
+            vkex::ColorBlendAttachmentStates();
+        for (size_t color_attach_index = 0;
+             color_attach_index < create_info.render_pass->GetRtvs().size();
+             color_attach_index++) {
+          create_info.color_blend_attachment_states.AddState(vk_state);
+        }
+      }
       shader_inputs[AppShaderList::GeometryCB].graphics_pipeline_create_info =
           create_info;
     }
