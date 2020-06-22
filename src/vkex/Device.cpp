@@ -62,12 +62,7 @@ vkex::Result CPhysicalDevice::InternalCreate(
   InitializeExtensionProperties();
 
   // Features
-  {
-    m_vk_physical_device_features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
-    vkex::GetPhysicalDeviceFeatures2(
-      m_create_info.vk_object, 
-      &m_vk_physical_device_features);
-  }
+  InitializeFeatures();
 
   // Queue family properties
   {
@@ -199,6 +194,29 @@ void CPhysicalDevice::InitializeExtensionProperties() {
                                          &properties_2);
     }
   }
+}
+
+void CPhysicalDevice::InitializeFeatures() {
+  m_extension_owned_features.shader_float16_int8_features = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT16_INT8_FEATURES_KHR };
+  m_extension_owned_features.storage_16bit_features = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES };
+  m_extension_owned_features.storage_8bit_features = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR };
+
+  m_extension_owned_features.shader_float16_int8_features.pNext =
+    &m_extension_owned_features.storage_16bit_features;
+  m_extension_owned_features.storage_16bit_features.pNext =
+    &m_extension_owned_features.storage_8bit_features;
+
+  m_vk_physical_device_features = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+  m_vk_physical_device_features.pNext =
+    &m_extension_owned_features.shader_float16_int8_features;
+
+  vkex::GetPhysicalDeviceFeatures2(
+    m_create_info.vk_object,
+    &m_vk_physical_device_features);
 }
 
 bool CPhysicalDevice::GetQueueFamilyProperties(
@@ -399,6 +417,39 @@ vkex::Result CDevice::InitializeQueueRequests()
   return vkex::Result::Success;
 }
 
+void CDevice::InitializeExtensionFeatures()
+{
+  void* p_next_front = const_cast<void *>(m_create_info.p_next);
+
+  const PhysicalDeviceExtensionFeatures& queried_extension_features =
+    m_create_info.physical_device->GetPhysicalDeviceExtensionFeatures();
+  PhysicalDeviceExtensionFeatures& requested_extension_features =
+    m_create_info.extension_features;
+
+  if (Contains(m_create_info.extensions, std::string(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME))) {
+    requested_extension_features.shader_float16_int8_features =
+      queried_extension_features.shader_float16_int8_features;
+    requested_extension_features.shader_float16_int8_features.pNext = p_next_front;
+    p_next_front = &(requested_extension_features.shader_float16_int8_features);
+  }
+
+  if (Contains(m_create_info.extensions, std::string(VK_KHR_16BIT_STORAGE_EXTENSION_NAME))) {
+    requested_extension_features.storage_16bit_features =
+      queried_extension_features.storage_16bit_features;
+    requested_extension_features.storage_16bit_features.pNext = p_next_front;
+    p_next_front = &(requested_extension_features.storage_16bit_features);
+  }
+
+  if (Contains(m_create_info.extensions, std::string(VK_KHR_8BIT_STORAGE_EXTENSION_NAME))) {
+    requested_extension_features.storage_8bit_features =
+      queried_extension_features.storage_8bit_features;
+    requested_extension_features.storage_8bit_features.pNext = p_next_front;
+    p_next_front = &(requested_extension_features.storage_8bit_features);
+  }
+
+  m_create_info.p_next = p_next_front;
+}
+
 vkex::Result CDevice::InitializeQueues()
 {
   std::vector<const void*> look_up_keys;
@@ -531,6 +582,8 @@ vkex::Result CDevice::InternalCreate(
     m_create_info.enabled_features.pipelineStatisticsQuery  = VK_TRUE;
     m_create_info.enabled_features.samplerAnisotropy        = VK_TRUE;
     m_create_info.enabled_features.sampleRateShading        = VK_TRUE;
+
+    InitializeExtensionFeatures();
   }
 
   // Create info

@@ -43,6 +43,12 @@ void VkexInfoApp::Configure(const vkex::ArgParser& args,
 
   configuration.optional_device_extensions.push_back(
       VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME);
+  configuration.optional_device_extensions.push_back(
+      VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME);
+  configuration.optional_device_extensions.push_back(
+      VK_KHR_16BIT_STORAGE_EXTENSION_NAME);
+  configuration.optional_device_extensions.push_back(
+      VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
 
 #if defined(ENABLE_VALIDATION)
   configuration.graphics_debug.enable = true;
