@@ -607,6 +607,22 @@ void VkexInfoApp::DrawAppInfoGUI(uint32_t frame_index) {
       }
     }
 
+    if (GetUpscalingTechnique() == UpscalingTechniqueKey::CAS) {
+      ImGui::Separator();
+
+      {
+        ImGui::Text("CAS");
+        ImGui::NextColumn();
+        ImGui::NextColumn();
+      }
+      {
+        ImGui::Text("Sharpness");
+        ImGui::NextColumn();
+        ImGui::SliderFloat("##CASSharpness", &m_cas_info.sharpness, 0.0f, 1.0f);
+        ImGui::NextColumn();
+      }
+    }
+
     if (GetUpscalingTechnique() == UpscalingTechniqueKey::Checkerboard) {
       ImGui::Separator();
 

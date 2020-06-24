@@ -120,6 +120,8 @@ void VkexInfoApp::Setup() {
     m_upscaling_technique_key = UpscalingTechniqueKey::kuNone;
   }
 
+  { m_cas_info.sharpness = 1.0f; }
+
   SetupImagesAndRenderPasses(GetPresentResolutionExtent(),
                              GetConfiguration().swapchain.color_format,
                              VK_FORMAT_D32_SFLOAT);
@@ -555,8 +557,8 @@ void VkexInfoApp::Update(double frame_elapsed_time) {
   m_target_to_present_scaled_copy_constants.data.dstHeight =
       present_res_extent.height;
 
-  UpdateCASConstants(internal_res_extent, target_res_extent, 1.0f,
-                     m_cas_upscaling_constants);
+  UpdateCASConstants(internal_res_extent, target_res_extent,
+                     m_cas_info.sharpness, m_cas_upscaling_constants);
 
   UpdateCheckerboardConstants(internal_res_extent, m_cb_upscaling_constants);
 

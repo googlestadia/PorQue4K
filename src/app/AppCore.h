@@ -167,6 +167,10 @@ struct GpuTimerInfo {
   uint64_t end_time;
 };
 
+struct CASUpscalingParams {
+  float sharpness;
+};
+
 struct PerFrameData {
   vkex::QueryPool timer_query_pool;
 
@@ -340,6 +344,8 @@ class VkexInfoApp : public vkex::Application {
   GLTFModel m_helmet_model;
 
   ConstantBufferManager m_constant_buffer_manager;
+
+  CASUpscalingParams m_cas_info;
 
   std::vector<PerFrameData> m_per_frame_datas;
 };
