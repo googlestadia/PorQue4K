@@ -124,9 +124,9 @@ typedef struct VkPhysicalDeviceShaderFloat16Int8FeaturesKHR {
 When I looked at the spec for `VkPhysicalDeviceShaderFloat16Int8Features`, I was
 a bit confused by this passage:
 
-> The VkPhysicalDeviceShaderFloat16Int8Features structure can also be included
-> in the pNext chain of a VkDeviceCreateInfo structure, in which case it
-> controls which additional features are enabled in the device.
+> The VkPhysicalDeviceShaderFloat16Int8Features structure **can** also be
+> included in the pNext chain of a VkDeviceCreateInfo structure, in which case
+> it controls which additional features are enabled in the device.
 
 The way I read this, it _appeared_ to me that if I wanted to enable/disable
 specific aspects of the extension, then I would pass the structure in during
