@@ -134,11 +134,11 @@ void CPhysicalDevice::InitializeVendorProperties()
       vk_device_create_info.enabledExtensionCount   = 1;
       vk_device_create_info.ppEnabledExtensionNames = &extension;
 
+      m_vendor_properties.amd.shader_core_properties = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD };
+
       VkDevice vk_device = VK_NULL_HANDLE;
       VkResult vk_result = vkex::CreateDevice(m_create_info.vk_object, &vk_device_create_info, nullptr, &vk_device);
       if (vk_result == VK_SUCCESS) {
-        m_vendor_properties.amd.shader_core_properties = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD };
-
         VkPhysicalDeviceProperties2 properties_2 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
         properties_2.pNext = &m_vendor_properties.amd.shader_core_properties;
 
@@ -327,13 +327,6 @@ vkex::Result CDevice::InitializeExtensions()
 #endif
     }
 
-    if (m_create_info.physical_device->IsAMD()) {
-      required.push_back(VK_AMD_SHADER_CORE_PROPERTIES_EXTENSION_NAME);
-    }
-    else {
-      VKEX_LOG_WARN("Skipping AMD extension on non-AMD device: " << VK_AMD_SHADER_CORE_PROPERTIES_EXTENSION_NAME);
-    }
-
     for (auto& name : required) {
       // Check to make sure extension is available
       bool found = Contains(m_found_extensions, name);
@@ -356,6 +349,12 @@ vkex::Result CDevice::InitializeExtensions()
 #if ! defined(VKEX_WIN32)
     optional.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
 #endif
+
+    if (m_create_info.physical_device->IsAMD()) {
+      optional.push_back(VK_AMD_SHADER_CORE_PROPERTIES_EXTENSION_NAME);
+    } else {
+      VKEX_LOG_WARN("Skipping AMD extension request on non-AMD device: " << VK_AMD_SHADER_CORE_PROPERTIES_EXTENSION_NAME);
+    }
 
     for (auto& optional_request : m_create_info.optional_extensions) {
       optional.push_back(optional_request);
@@ -641,8 +640,9 @@ vkex::Result CDevice::InternalCreate(
       }
       VKEX_LOG_INFO("   " << "Type : " << device_type);
     }
-    // AMDD shader core properties
-    if (m_create_info.physical_device->IsAMD()) {
+    // AMD shader core properties
+    if (m_create_info.physical_device->IsAMD() &&
+        Contains(m_create_info.extensions, std::string(VK_AMD_SHADER_CORE_PROPERTIES_EXTENSION_NAME))) {
         VkPhysicalDeviceShaderCorePropertiesAMD shader_core_properties = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD };
 
         VkPhysicalDeviceProperties2 properties_2 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
