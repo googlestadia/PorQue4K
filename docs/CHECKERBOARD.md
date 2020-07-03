@@ -938,7 +938,7 @@ on a reference [Vega 56][vega56_info].
 It seems reasonable to strive to drive our performance toward that 244 us
 number. For 1080p, we can quarter the projection: 61 us.
 
-**June 3, 2020**
+**June 3, 2020 - Initial Implementation**
 
 The very first _working_ implementation of the checkerboard resolve was
 approximately 102 us @ 1080p, and 410 us @ 4K. It used 60 VGPRs and 38 SGPRs
@@ -947,6 +947,20 @@ approximately 102 us @ 1080p, and 410 us @ 4K. It used 60 VGPRs and 38 SGPRs
 After a significant re-organization of the code, the register usage improved.
 The new shader used 52 VGPRs and 27 SGPRs. Performance @ 4K was essentially
 static at 404 us (RGP), though the in-app profiler reported a steady 380 us.
+
+**July 2, 2020 - FP16 Experiments**
+
+After enabling FP16 in the resolve shader, the performance didn't actually
+change (more details below). But because of the investigation, I do have an idea
+of what to look at next: reducing the number of `image_load` requests.
+
+The first idea I had was to load the data into shared memory. The vast majority
+of the per-quad neighborhood is shared between quads, so I don't really need
+multiple load requests per-quad.
+
+Along that thread, I could also consider loading the neighborhood values
+directly into the VGPRs, decoupling the neighborhoods from the per-thread
+registers. Each thread would do lookups into the shared VGPR values.
 
 ##### 1 Pixel per thread or 1 Quad per Thread?
 
@@ -975,7 +989,54 @@ of the increased data locality per wavefront.
 It could be interesting to experiment with other pixels-per-thread counts.
 
 ##### 16-bit Floats
-`TBD, implementation would save on register pressure, increasing occupancy`
+
+One of the initial things I wanted to investigate was reducing register pressure
+in order to increase occupancy. Depending on the driver/GPU combo, the VGPR
+usage was 50-52 VGPRs (which always allocates 52 VGPRs). This means I have a max
+occupancy of 4 wavefronts with a per-SIMD cap of 256 VGPRs on GCN parts. If I
+could get to 48 VGPRs, I would get an extra wavefront!
+
+An early idea to relieve register pressure was to use FP16 to pack lower
+precision operands into the 32-bit registers, saving both register space and
+some ALU (though I didn't care about the latter). After working to enable FP16
+in the checkerboard resolve shader, and verifying the register savings (46
+VGPRs), I checked the performance and...it was the same?
+
+![Comparing CB resolve occupancy][cb_fp16_fp32_occupancy]
+
+The FP32-only resolve had an average wavefront duration of 14925 clocks,
+compared to 18501 clocks for the FP16-enabled resolve. That's a relative
+slowdown of 24%, matching up with the 25% increase in occupancy.
+
+This is a strong indicator that occupancy wasn't the limiting factor for the
+checkerboard resolve, which was unexpected. I set out to figure out if I could
+get instruction timing working (where I failed before), and I was luckier in
+these attempts.
+
+![Comparing CB resolve instruction timing][cb_fp16_fp32_inst_timing]
+
+From here, I can see where the additional clocks are being spent in the
+FP16-enabled resolve. There's a large jump in latency being incurred by early
+`image_load` instructions in the generated ISA. We know the average slowdown per
+wavefront is 3576 clocks in the FP16-enabled resolve. We can see ~3000 clocks of
+extra latency in just these four `image_load` instructions. These are also the
+_first_ calls to `image_load` in each version of the shader, which is a hint to
+what is happening in the shader.
+
+My theory is that the wavefronts are overloading TA with their `image_load`
+requests, and the wavefronts are stalling waiting for their requests to be
+issued. This is different than waiting for loads to return (`s_waitcnt`), which
+would indicate bandwidth limitations.
+
+I would be able to confirm my theory by looking at SPM counters (which are not
+exposed in RGP). Those counters would tell me how many cycles the TA unit is
+stalling the CUs when it is oversubscribed.
+
+If I had earlier access to instruction timing or instruction tracing, I might
+have been able to avoid this investigation, but it was still interesting to
+conduct. I might come back to trying FP16 after fixing other problems.
+
+More info about enabling FP16 in the [Miscellaneous Topics](MISC.md) page.
 
 ## Postprocessing
 
@@ -1075,3 +1136,5 @@ Carpentier, Kohei Ishiyama
 [param_interp_compare]:images/parameter_interpolation_compare.PNG
 [cb_resolve_quad]:images/checkerboard_resolve_per_thread_quad_arrangement.PNG
 [cb_resolve_neighborhood]:images/checkerboard_resolve_quad_neighborhood.PNG
+[cb_fp16_fp32_occupancy]:images/checkerboard_compare_fp32_fp16_occupancy.PNG
+[cb_fp16_fp32_inst_timing]:images/checkerboard_compare_fp32_fp16_inst_timing.PNG
